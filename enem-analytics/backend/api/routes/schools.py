@@ -1,5 +1,6 @@
 """
 School endpoints for ENEM Analytics API
+Uses DuckDB for fast analytical queries (10-100x faster than Pandas)
 """
 
 from fastapi import APIRouter, Query, HTTPException
@@ -8,6 +9,15 @@ from pydantic import BaseModel
 import pandas as pd
 import os
 import requests
+
+# DuckDB-based data layer for fast queries
+from data.duckdb_store import (
+    list_schools as duckdb_list_schools,
+    get_top_schools as duckdb_get_top_schools,
+    search_schools as duckdb_search_schools,
+    get_school_detail as duckdb_get_school_detail,
+    get_stats as duckdb_get_stats,
+)
 
 router = APIRouter()
 
@@ -355,6 +365,12 @@ def get_df():
     return get_dataframe()
 
 
+def get_latest_df():
+    """Get cached DataFrame for latest year"""
+    from api.main import get_latest_year_df
+    return get_latest_year_df()
+
+
 @router.get("/", response_model=List[SchoolSummary])
 async def list_schools(
     page: int = Query(1, ge=1),
@@ -369,7 +385,7 @@ async def list_schools(
     order: str = Query("asc", regex="^(asc|desc)$")
 ):
     """
-    List schools with pagination and filtering
+    List schools with pagination and filtering (DuckDB optimized)
 
     Filters:
     - uf: State code (e.g., SP, RJ, CE)
@@ -378,71 +394,36 @@ async def list_schools(
     - porte: 1-5 (1=Muito pequena, 2=Pequena, 3=Média, 4=Grande, 5=Muito grande)
     - search: Search by name or INEP code
     """
-    df = get_df()
-    if df is None:
-        raise HTTPException(status_code=500, detail="Data not loaded")
+    # Use DuckDB for fast SQL queries
+    records = duckdb_list_schools(
+        page=page,
+        limit=limit,
+        search=search,
+        uf=uf,
+        tipo_escola=tipo_escola,
+        localizacao=localizacao,
+        porte=porte,
+        ano=ano,
+        order_by=order_by,
+        order=order
+    )
 
-    # Filter by year (default to most recent)
-    target_ano = ano or int(df["ano"].max())
-    df_year = df[df["ano"] == target_ano].copy()
-
-    # Apply filters
-    if search:
-        search_lower = search.lower()
-        df_year = df_year[
-            df_year["nome_escola"].str.lower().str.contains(search_lower, na=False) |
-            df_year["codigo_inep"].str.contains(search, na=False)
-        ]
-
-    if uf:
-        df_year = df_year[df_year["uf"] == uf.upper()]
-
-    if tipo_escola:
-        df_year = df_year[df_year["tipo_escola"] == tipo_escola]
-
-    if localizacao:
-        df_year = df_year[df_year["localizacao"] == localizacao]
-
-    if porte:
-        df_year = df_year[df_year["porte"] == porte]
-
-    # Sort
-    if order_by == "ranking":
-        sort_col = "ranking_brasil"
-        df_year = df_year.dropna(subset=["ranking_brasil"])
-    elif order_by == "nota":
-        sort_col = "nota_media"
-    else:
-        sort_col = "nome_escola"
-
-    ascending = order == "asc"
-    df_year = df_year.sort_values(sort_col, ascending=ascending)
-
-    # Pagination
-    total = len(df_year)
-    start = (page - 1) * limit
-    end = start + limit
-    df_page = df_year.iloc[start:end]
-
-    # Build response
-    results = []
-    for _, row in df_page.iterrows():
-        anos_count = int(df[df["codigo_inep"] == row["codigo_inep"]]["ano"].nunique())
-        results.append(SchoolSummary(
-            codigo_inep=str(row["codigo_inep"]),
-            nome_escola=str(row["nome_escola"]),
-            uf=str(row["uf"]) if pd.notna(row.get("uf")) else None,
-            tipo_escola=str(row["tipo_escola"]) if pd.notna(row.get("tipo_escola")) else None,
-            localizacao=str(row["localizacao"]) if pd.notna(row.get("localizacao")) else None,
-            porte=int(row["porte"]) if pd.notna(row.get("porte")) else None,
-            porte_label=str(row["porte_label"]) if pd.notna(row.get("porte_label")) else None,
-            qt_matriculas=int(row["qt_matriculas"]) if pd.notna(row.get("qt_matriculas")) else None,
-            ultimo_ranking=int(row["ranking_brasil"]) if pd.notna(row.get("ranking_brasil")) else None,
-            ultima_nota=float(round(row["nota_media"], 2)) if pd.notna(row.get("nota_media")) else None,
-            anos_participacao=anos_count
-        ))
-
-    return results
+    return [
+        SchoolSummary(
+            codigo_inep=str(r["codigo_inep"]),
+            nome_escola=str(r["nome_escola"]),
+            uf=r.get("uf"),
+            tipo_escola=r.get("tipo_escola"),
+            localizacao=r.get("localizacao"),
+            porte=r.get("porte"),
+            porte_label=r.get("porte_label"),
+            qt_matriculas=r.get("qt_matriculas"),
+            ultimo_ranking=r.get("ultimo_ranking"),
+            ultima_nota=r.get("ultima_nota"),
+            anos_participacao=r.get("anos_participacao", 1)
+        )
+        for r in records
+    ]
 
 
 @router.get("/top")
@@ -455,7 +436,7 @@ async def get_top_schools(
     porte: Optional[int] = None
 ):
     """
-    Get top ranked schools
+    Get top ranked schools (DuckDB optimized)
 
     Filters:
     - uf: State code (e.g., SP, RJ, CE)
@@ -463,57 +444,15 @@ async def get_top_schools(
     - localizacao: "Urbana" or "Rural"
     - porte: 1-5 (1=Muito pequena, 2=Pequena, 3=Média, 4=Grande, 5=Muito grande)
     """
-    df = get_df()
-    if df is None:
-        raise HTTPException(status_code=500, detail="Data not loaded")
-
-    target_ano = ano or int(df["ano"].max())
-    df_year = df[df["ano"] == target_ano].copy()
-
-    if uf:
-        df_year = df_year[df_year["uf"] == uf.upper()]
-
-    if tipo_escola:
-        df_year = df_year[df_year["tipo_escola"] == tipo_escola]
-
-    if localizacao:
-        df_year = df_year[df_year["localizacao"] == localizacao]
-
-    if porte:
-        df_year = df_year[df_year["porte"] == porte]
-
-    # Sort by ranking
-    df_year = df_year.dropna(subset=["ranking_brasil"])
-    df_year = df_year.sort_values("ranking_brasil", ascending=True)
-    df_top = df_year.head(limit)
-
-    results = []
-    for _, row in df_top.iterrows():
-        results.append({
-            "ranking": int(row["ranking_brasil"]),
-            "codigo_inep": str(row["codigo_inep"]),
-            "nome_escola": str(row["nome_escola"]),
-            "uf": str(row["uf"]) if pd.notna(row.get("uf")) else None,
-            "tipo_escola": str(row["tipo_escola"]) if pd.notna(row.get("tipo_escola")) else None,
-            "localizacao": str(row["localizacao"]) if pd.notna(row.get("localizacao")) else None,
-            "porte": int(row["porte"]) if pd.notna(row.get("porte")) else None,
-            "porte_label": str(row["porte_label"]) if pd.notna(row.get("porte_label")) else None,
-            "qt_matriculas": int(row["qt_matriculas"]) if pd.notna(row.get("qt_matriculas")) else None,
-            "nota_media": float(round(row["nota_media"], 2)) if pd.notna(row.get("nota_media")) else None,
-            "nota_cn": float(round(row["nota_cn"], 2)) if pd.notna(row.get("nota_cn")) else None,
-            "nota_ch": float(round(row["nota_ch"], 2)) if pd.notna(row.get("nota_ch")) else None,
-            "nota_lc": float(round(row["nota_lc"], 2)) if pd.notna(row.get("nota_lc")) else None,
-            "nota_mt": float(round(row["nota_mt"], 2)) if pd.notna(row.get("nota_mt")) else None,
-            "nota_redacao": float(round(row["nota_redacao"], 2)) if pd.notna(row.get("nota_redacao")) else None,
-            "desempenho_habilidades": float(round(row["desempenho_habilidades"], 4)) if pd.notna(row.get("desempenho_habilidades")) else None,
-            "competencia_redacao_media": float(round(row["competencia_redacao_media"], 2)) if pd.notna(row.get("competencia_redacao_media")) else None,
-        })
-
-    return {
-        "ano": target_ano,
-        "total": len(results),
-        "schools": results
-    }
+    # Use DuckDB for fast SQL queries
+    return duckdb_get_top_schools(
+        limit=limit,
+        ano=ano,
+        uf=uf,
+        tipo_escola=tipo_escola,
+        localizacao=localizacao,
+        porte=porte
+    )
 
 
 @router.get("/search")
@@ -522,110 +461,49 @@ async def search_schools(
     limit: int = Query(20, ge=1, le=100)
 ):
     """
-    Quick search for schools by name or INEP code
+    Quick search for schools by name or INEP code (DuckDB optimized)
     """
-    df = get_df()
-    if df is None:
-        raise HTTPException(status_code=500, detail="Data not loaded")
-
-    q_lower = q.lower()
-
-    # Get most recent year for each school
-    df_latest = df.loc[df.groupby("codigo_inep")["ano"].idxmax()]
-
-    # Search
-    matches = df_latest[
-        df_latest["nome_escola"].str.lower().str.contains(q_lower, na=False) |
-        df_latest["codigo_inep"].str.contains(q, na=False)
-    ]
-
-    matches = matches.head(limit)
-
-    return [
-        {
-            "codigo_inep": str(row["codigo_inep"]),
-            "nome_escola": str(row["nome_escola"]),
-            "uf": str(row["uf"]) if pd.notna(row.get("uf")) else None,
-            "ultimo_ano": int(row["ano"])
-        }
-        for _, row in matches.iterrows()
-    ]
+    # Use DuckDB for fast SQL queries
+    return duckdb_search_schools(q=q, limit=limit)
 
 
 @router.get("/{codigo_inep}", response_model=SchoolDetail)
 async def get_school(codigo_inep: str):
     """
-    Get detailed information for a specific school
+    Get detailed information for a specific school (DuckDB optimized)
     """
-    df = get_df()
-    if df is None:
-        raise HTTPException(status_code=500, detail="Data not loaded")
+    # Use DuckDB for fast SQL queries
+    result = duckdb_get_school_detail(codigo_inep)
 
-    df_school = df[df["codigo_inep"] == codigo_inep].copy()
-
-    if df_school.empty:
+    if result is None:
         raise HTTPException(status_code=404, detail=f"School {codigo_inep} not found")
 
-    df_school = df_school.sort_values("ano")
-
-    # Build history
-    historico = []
-    for _, row in df_school.iterrows():
-        historico.append(SchoolScore(
-            ano=int(row["ano"]),
-            nota_cn=float(round(row["nota_cn"], 2)) if pd.notna(row.get("nota_cn")) else None,
-            nota_ch=float(round(row["nota_ch"], 2)) if pd.notna(row.get("nota_ch")) else None,
-            nota_lc=float(round(row["nota_lc"], 2)) if pd.notna(row.get("nota_lc")) else None,
-            nota_mt=float(round(row["nota_mt"], 2)) if pd.notna(row.get("nota_mt")) else None,
-            nota_redacao=float(round(row["nota_redacao"], 2)) if pd.notna(row.get("nota_redacao")) else None,
-            nota_media=float(round(row["nota_media"], 2)) if pd.notna(row.get("nota_media")) else None,
-            ranking_brasil=int(row["ranking_brasil"]) if pd.notna(row.get("ranking_brasil")) else None,
-            desempenho_habilidades=float(round(row["desempenho_habilidades"], 4)) if pd.notna(row.get("desempenho_habilidades")) else None,
-            competencia_redacao_media=float(round(row["competencia_redacao_media"], 2)) if pd.notna(row.get("competencia_redacao_media")) else None
-        ))
-
-    # Calculate trend
-    if len(df_school) >= 2:
-        recent = df_school.tail(3)
-        if len(recent) >= 2 and "nota_media" in recent.columns:
-            first_nota = recent.iloc[0]["nota_media"]
-            last_nota = recent.iloc[-1]["nota_media"]
-            if pd.notna(first_nota) and pd.notna(last_nota):
-                diff = last_nota - first_nota
-                if diff > 10:
-                    tendencia = "subindo"
-                elif diff < -10:
-                    tendencia = "descendo"
-                else:
-                    tendencia = "estável"
-            else:
-                tendencia = None
-        else:
-            tendencia = None
-    else:
-        tendencia = None
-
-    # Best year
-    df_with_ranking = df_school.dropna(subset=["ranking_brasil"])
-    if not df_with_ranking.empty:
-        best_idx = df_with_ranking["ranking_brasil"].idxmin()
-        melhor_ano = int(df_with_ranking.loc[best_idx, "ano"])
-        melhor_ranking = int(df_with_ranking.loc[best_idx, "ranking_brasil"])
-    else:
-        melhor_ano = None
-        melhor_ranking = None
-
-    latest = df_school.iloc[-1]
+    # Convert history dicts to SchoolScore models
+    historico = [
+        SchoolScore(
+            ano=h["ano"],
+            nota_cn=h.get("nota_cn"),
+            nota_ch=h.get("nota_ch"),
+            nota_lc=h.get("nota_lc"),
+            nota_mt=h.get("nota_mt"),
+            nota_redacao=h.get("nota_redacao"),
+            nota_media=h.get("nota_media"),
+            ranking_brasil=h.get("ranking_brasil"),
+            desempenho_habilidades=h.get("desempenho_habilidades"),
+            competencia_redacao_media=h.get("competencia_redacao_media")
+        )
+        for h in result["historico"]
+    ]
 
     return SchoolDetail(
-        codigo_inep=str(codigo_inep),
-        nome_escola=str(latest["nome_escola"]),
-        uf=str(latest["uf"]) if pd.notna(latest.get("uf")) else None,
-        tipo_escola=str(latest["tipo_escola"]) if pd.notna(latest.get("tipo_escola")) else None,
+        codigo_inep=result["codigo_inep"],
+        nome_escola=result["nome_escola"],
+        uf=result.get("uf"),
+        tipo_escola=result.get("tipo_escola"),
         historico=historico,
-        tendencia=tendencia,
-        melhor_ano=melhor_ano,
-        melhor_ranking=melhor_ranking
+        tendencia=result.get("tendencia"),
+        melhor_ano=result.get("melhor_ano"),
+        melhor_ranking=result.get("melhor_ranking")
     )
 
 

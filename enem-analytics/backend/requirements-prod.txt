@@ -1,3 +1,4 @@
+# Production requirements - CPU-only for Fly.io
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pandas
@@ -26,8 +27,9 @@ python-dotenv
 # Email
 resend
 
-# GLiNER2 ML dependencies
-torch>=2.0.0
+# GLiNER2 ML dependencies - CPU only
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
 transformers>=4.35.0
 safetensors>=0.4.0
 

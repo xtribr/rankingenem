@@ -3,6 +3,10 @@ ENEM Analytics API
 FastAPI backend for ENEM school data analysis and predictions
 """
 
+# Load environment variables first
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -14,13 +18,14 @@ from api.auth import router as auth_router
 from api.admin import router as admin_router
 from database.config import engine
 from database.models import Base
+from data.duckdb_store import init_database as init_duckdb
 
 # Global data store
 data_store = {}
 
 
 def load_data():
-    """Load ENEM data from CSV into memory"""
+    """Load ENEM data from CSV into memory with pre-computed aggregations"""
     data_path = Path(__file__).parent.parent / "data" / "enem_2018_2024_completo.csv"
 
     df = pd.read_csv(data_path)
@@ -43,6 +48,11 @@ def load_data():
     }
     df["uf"] = df["uf_code"].map(uf_map)
 
+    # Pre-compute anos_participacao for each school (PERFORMANCE OPTIMIZATION)
+    anos_participacao = df.groupby("codigo_inep")["ano"].nunique().reset_index()
+    anos_participacao.columns = ["codigo_inep", "anos_participacao"]
+    df = df.merge(anos_participacao, on="codigo_inep", how="left")
+
     return df
 
 
@@ -57,8 +67,12 @@ async def lifespan(app: FastAPI):
     else:
         print("Database not configured (DATABASE_URL not set)")
 
-    # Load ENEM data
-    print("Loading ENEM data...")
+    # Initialize DuckDB for fast school queries
+    print("Initializing DuckDB...")
+    init_duckdb()
+
+    # Load ENEM data (Pandas - for legacy endpoints that still need it)
+    print("Loading ENEM data (Pandas)...")
     data_store["df"] = load_data()
     print(f"Loaded {len(data_store['df']):,} records")
     print(f"Years: {sorted(data_store['df']['ano'].unique())}")
@@ -79,6 +93,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://escolas.xtri.online",
+        "https://frontend-alpha-ten-weodp2t3hu.vercel.app",
         "http://localhost:3000",
         "http://localhost:3001",
         "http://127.0.0.1:3000",
@@ -86,6 +101,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_origin_regex=r"https://frontend-.*\.vercel\.app",
 )
 
 # Include routers
@@ -143,3 +159,14 @@ async def get_stats():
 def get_dataframe():
     """Get the loaded dataframe"""
     return data_store.get("df")
+
+
+def get_latest_year_df():
+    """Get pre-filtered DataFrame for the most recent year (cached for performance)"""
+    if "df_latest_year" not in data_store:
+        df = data_store.get("df")
+        if df is not None:
+            latest_year = int(df["ano"].max())
+            data_store["df_latest_year"] = df[df["ano"] == latest_year].copy()
+            data_store["latest_year"] = latest_year
+    return data_store.get("df_latest_year"), data_store.get("latest_year")
