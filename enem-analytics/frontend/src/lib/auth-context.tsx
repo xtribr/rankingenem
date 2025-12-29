@@ -1,16 +1,23 @@
 'use client';
 
+/**
+ * Auth Context - Supabase Version
+ *
+ * Provides authentication state and methods using Supabase Auth.
+ */
+
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
-import { User, getToken, getStoredUser, setToken, setStoredUser, removeToken } from './auth';
-import { API_BASE } from './api';
+import { supabase, User, getCurrentUser, signIn, signOut } from './supabase';
+import type { Session } from '@supabase/supabase-js';
 
 interface AuthContextType {
   user: User | null;
+  session: Session | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   isAdmin: boolean;
   login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
 
@@ -18,82 +25,104 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const refreshUser = useCallback(async () => {
-    const token = getToken();
-    if (!token) {
-      setUser(null);
-      setIsLoading(false);
-      return;
-    }
-
+    console.log('[AuthContext] refreshUser called');
     try {
-      const response = await fetch(`${API_BASE}/api/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const userData = await response.json();
-        setUser(userData);
-        setStoredUser(userData);
-      } else {
-        removeToken();
-        setUser(null);
-      }
-    } catch {
-      // Keep stored user if API is unreachable
-      const storedUser = getStoredUser();
-      if (storedUser) {
-        setUser(storedUser);
-      }
-    } finally {
-      setIsLoading(false);
+      const currentUser = await getCurrentUser();
+      console.log('[AuthContext] getCurrentUser returned:', currentUser?.email || 'null');
+      setUser(currentUser);
+    } catch (error) {
+      console.error('[AuthContext] Failed to refresh user:', error);
+      setUser(null);
     }
   }, []);
 
   useEffect(() => {
-    // Initialize from stored user for faster UX
-    const storedUser = getStoredUser();
-    if (storedUser) {
-      setUser(storedUser);
-    }
-    refreshUser();
+    let mounted = true;
+
+    // Get initial session
+    console.log('[AuthContext] Initializing...');
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
+      console.log('[AuthContext] Initial session:', session ? 'exists' : 'none');
+      setSession(session);
+      if (session) {
+        refreshUser().finally(() => {
+          if (mounted) {
+            console.log('[AuthContext] Initial load complete');
+            setIsLoading(false);
+          }
+        });
+      } else {
+        console.log('[AuthContext] No session, loading complete');
+        setIsLoading(false);
+      }
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (!mounted) return;
+        console.log('[AuthContext] Auth state changed:', event);
+        setSession(session);
+
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          console.log('[AuthContext] Refreshing user after', event);
+          await refreshUser();
+          console.log('[AuthContext] User refreshed, setting isLoading=false');
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+        }
+
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    );
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, [refreshUser]);
 
   const login = async (email: string, password: string) => {
-    const response = await fetch(`${API_BASE}/api/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, password }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Erro ao fazer login');
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        throw new Error(error.message === 'Invalid login credentials'
+          ? 'Email ou senha incorretos'
+          : error.message);
+      }
+      // User will be set by onAuthStateChange
+    } catch (error) {
+      setIsLoading(false);
+      throw error;
     }
-
-    const data = await response.json();
-    setToken(data.access_token);
-    setStoredUser(data.user);
-    setUser(data.user);
   };
 
-  const logout = () => {
-    removeToken();
-    setUser(null);
+  const logout = async () => {
+    setIsLoading(true);
+    try {
+      await signOut();
+      setUser(null);
+      setSession(null);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <AuthContext.Provider
       value={{
         user,
+        session,
         isLoading,
-        isAuthenticated: !!user,
+        isAuthenticated: !!session && !!user,
         isAdmin: user?.is_admin ?? false,
         login,
         logout,
