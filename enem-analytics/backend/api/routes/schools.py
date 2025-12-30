@@ -9,6 +9,19 @@ from pydantic import BaseModel
 import pandas as pd
 import os
 import requests
+from supabase import create_client
+
+# Supabase configuration for school skills
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://rqzxcturezryjbwsptld.supabase.co")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+_supabase_client = None
+
+def get_supabase():
+    """Get or create Supabase client."""
+    global _supabase_client
+    if _supabase_client is None and SUPABASE_SERVICE_KEY:
+        _supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    return _supabase_client
 
 # DuckDB-based data layer for fast queries
 from data.duckdb_store import (
@@ -180,145 +193,39 @@ def get_skills_df():
     return _skills_df
 
 
-def fetch_school_skills_from_powerbi(codigo_inep: str) -> List[Dict]:
-    """Fetch skills data for a specific school from PowerBI API"""
-    query = {
-        "version": "1.0.0",
-        "queries": [{
-            "Query": {
-                "Commands": [{
-                    "SemanticQueryDataShapeCommand": {
-                        "Query": {
-                            "Version": 2,
-                            "From": [
-                                {"Name": "c", "Entity": "cur-enem-school-skill", "Type": 0},
-                                {"Name": "s", "Entity": "stg-senso-escolar", "Type": 0},
-                                {"Name": "e", "Entity": "enem_area", "Type": 0},
-                                {"Name": "f", "Entity": "filtro_tamanho", "Type": 0},
-                                {"Name": "co", "Entity": "comparação", "Type": 0}
-                            ],
-                            "Select": [
-                                {
-                                    "Column": {
-                                        "Expression": {"SourceRef": {"Source": "e"}},
-                                        "Property": "area"
-                                    },
-                                    "Name": "area"
-                                },
-                                {
-                                    "Column": {
-                                        "Expression": {"SourceRef": {"Source": "c"}},
-                                        "Property": "co_habilidade"
-                                    },
-                                    "Name": "habilidade"
-                                },
-                                {
-                                    "Aggregation": {
-                                        "Expression": {
-                                            "Column": {
-                                                "Expression": {"SourceRef": {"Source": "c"}},
-                                                "Property": "desempenho_hab"
-                                            }
-                                        },
-                                        "Function": 1
-                                    },
-                                    "Name": "desempenho"
-                                }
-                            ],
-                            "Where": [
-                                {
-                                    "Condition": {
-                                        "In": {
-                                            "Expressions": [{"Column": {"Expression": {"SourceRef": {"Source": "s"}}, "Property": "ano"}}],
-                                            "Values": [[{"Literal": {"Value": "2024L"}}]]
-                                        }
-                                    }
-                                },
-                                {
-                                    "Condition": {
-                                        "In": {
-                                            "Expressions": [{"Column": {"Expression": {"SourceRef": {"Source": "f"}}, "Property": "nome"}}],
-                                            "Values": [[{"Literal": {"Value": "'Todas escolas'"}}]]
-                                        }
-                                    }
-                                },
-                                {
-                                    "Condition": {
-                                        "In": {
-                                            "Expressions": [{"Column": {"Expression": {"SourceRef": {"Source": "co"}}, "Property": "Coluna 1"}}],
-                                            "Values": [[{"Literal": {"Value": "'Brasil'"}}]]
-                                        }
-                                    }
-                                },
-                                {
-                                    "Condition": {
-                                        "StartsWith": {
-                                            "Left": {"Column": {"Expression": {"SourceRef": {"Source": "s"}}, "Property": "inep_nome"}},
-                                            "Right": {"Literal": {"Value": f"'{codigo_inep}'"}}
-                                        }
-                                    }
-                                }
-                            ]
-                        },
-                        "Binding": {
-                            "Primary": {"Groupings": [{"Projections": [0, 1, 2]}]},
-                            "DataReduction": {"DataVolume": 5, "Primary": {"Window": {"Count": 500}}},
-                            "Version": 1
-                        },
-                        "ExecutionMetricsKind": 1
-                    }
-                }]
-            },
-            "QueryId": "",
-            "ApplicationContext": {"DatasetId": POWERBI_DATASET_ID, "Sources": [{"ReportId": POWERBI_REPORT_ID}]}
-        }],
-        "cancelQueries": [],
-        "modelId": POWERBI_MODEL_ID
-    }
+def fetch_school_skills_from_supabase(codigo_inep: str) -> List[Dict]:
+    """Fetch skills data for a specific school from Supabase (fast, local database)."""
+    supabase = get_supabase()
+    if not supabase:
+        print("Supabase client not available, SUPABASE_SERVICE_KEY may be missing")
+        return []
 
     try:
-        response = requests.post(POWERBI_API_URL, headers=POWERBI_HEADERS, json=query, timeout=30)
-        response.raise_for_status()
-        data = response.json()
+        result = supabase.table("school_skills").select("*").eq("codigo_inep", codigo_inep).execute()
 
-        # Parse response
-        ds = data["results"][0]["result"]["data"]["dsr"]["DS"][0]
-        value_dicts = ds.get("ValueDicts", {})
-        area_names = value_dicts.get("D0", [])
+        if not result.data:
+            return []
 
         records = []
-        current_area = None
-
-        for ph in ds.get("PH", []):
-            for row in ph.get("DM0", []):
-                if "C" not in row:
-                    continue
-                values = row["C"]
-                repeat = row.get("R")
-
-                if len(values) == 3:
-                    area_idx = values[0]
-                    skill_num = values[1]
-                    perf = float(values[2])
-                    current_area = area_names[area_idx] if area_idx < len(area_names) else f"Area{area_idx}"
-                elif len(values) == 2 and repeat == 1:
-                    skill_num = values[0]
-                    perf = float(values[1])
-                else:
-                    continue
-
-                records.append({
-                    "area": current_area,
-                    "skill_num": int(skill_num),
-                    "performance": round(perf * 100, 1),
-                    "descricao": SKILL_DESCRIPTIONS.get(current_area, {}).get(skill_num, f"Habilidade {skill_num}")
-                })
+        for row in result.data:
+            records.append({
+                "area": row["area"],
+                "skill_num": row["skill_num"],
+                "performance": float(row["performance"]),
+                "descricao": row.get("descricao") or SKILL_DESCRIPTIONS.get(row["area"], {}).get(row["skill_num"], f"Habilidade {row['skill_num']}")
+            })
 
         return records
 
     except Exception as e:
-        print(f"Error fetching school skills: {e}")
+        print(f"Error fetching school skills from Supabase: {e}")
         return []
+
+
+# Legacy PowerBI function (deprecated, kept for reference)
+def fetch_school_skills_from_powerbi(codigo_inep: str) -> List[Dict]:
+    """DEPRECATED: Use fetch_school_skills_from_supabase instead. PowerBI calls are slow (5-30s)."""
+    return fetch_school_skills_from_supabase(codigo_inep)
 
 
 class SchoolScore(BaseModel):

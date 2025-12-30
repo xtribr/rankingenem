@@ -1,0 +1,21 @@
+
+# Python venv
+backend/venv/
+backend/venv312/
+
+# Model checkpoints (keep only final)
+backend/models/gliner2-enem-semantic/checkpoint-*/
+backend/models/gliner2-enem-semantic/best/
+
+# Large data files (stored in Supabase)
+backend/data/school_skills_*.json
+backend/data/school_skills_*.csv
+backend/data/*_partial.*
+
+# Environment
+backend/.env
+**/.env
+
+# Python cache
+**/__pycache__/
+*.pyc
