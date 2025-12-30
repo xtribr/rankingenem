@@ -8,7 +8,6 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel
 import pandas as pd
 import os
-import requests
 from supabase import create_client
 
 # Supabase configuration for school skills
@@ -37,20 +36,7 @@ router = APIRouter()
 # Cache for skills data
 _skills_df = None
 
-# PowerBI API config for school-specific skills
-POWERBI_API_URL = "https://wabi-brazil-south-b-primary-api.analysis.windows.net/public/reports/querydata?synchronous=true"
-POWERBI_MODEL_ID = 6606248
-POWERBI_DATASET_ID = "68135bd6-e83c-419b-90e2-64bdb5553961"
-POWERBI_REPORT_ID = "e93cdfb7-4848-4123-b9f7-b075ec852dfc"
-POWERBI_HEADERS = {
-    "Accept": "application/json, text/plain, */*",
-    "Content-Type": "application/json;charset=UTF-8",
-    "Origin": "https://app.powerbi.com",
-    "Referer": "https://app.powerbi.com/",
-    "X-PowerBI-ResourceKey": "95131326-e9de-47c4-8bf5-12c27c1e113a",
-}
-
-# Skill descriptions
+# Skill descriptions (used for enriching data)
 SKILL_DESCRIPTIONS = {
     "CN": {
         1: "Compreender fenômenos naturais usando conceitos científicos",
@@ -193,15 +179,29 @@ def get_skills_df():
     return _skills_df
 
 
-def fetch_school_skills_from_supabase(codigo_inep: str) -> List[Dict]:
-    """Fetch skills data for a specific school from Supabase (fast, local database)."""
+def fetch_school_skills_from_supabase(codigo_inep: str, ano: Optional[int] = None) -> List[Dict]:
+    """
+    Fetch skills data for a specific school from Supabase.
+
+    Args:
+        codigo_inep: School INEP code
+        ano: Year of the data (defaults to latest available)
+
+    Returns:
+        List of skill performance records
+    """
     supabase = get_supabase()
     if not supabase:
         print("Supabase client not available, SUPABASE_SERVICE_KEY may be missing")
         return []
 
     try:
-        result = supabase.table("school_skills").select("*").eq("codigo_inep", codigo_inep).execute()
+        query = supabase.table("school_skills").select("*").eq("codigo_inep", codigo_inep)
+
+        if ano:
+            query = query.eq("ano", ano)
+
+        result = query.execute()
 
         if not result.data:
             return []
@@ -212,7 +212,8 @@ def fetch_school_skills_from_supabase(codigo_inep: str) -> List[Dict]:
                 "area": row["area"],
                 "skill_num": row["skill_num"],
                 "performance": float(row["performance"]),
-                "descricao": row.get("descricao") or SKILL_DESCRIPTIONS.get(row["area"], {}).get(row["skill_num"], f"Habilidade {row['skill_num']}")
+                "descricao": row.get("descricao") or SKILL_DESCRIPTIONS.get(row["area"], {}).get(row["skill_num"], f"Habilidade {row['skill_num']}"),
+                "ano": row.get("ano", 2024)
             })
 
         return records
@@ -222,10 +223,18 @@ def fetch_school_skills_from_supabase(codigo_inep: str) -> List[Dict]:
         return []
 
 
-# Legacy PowerBI function (deprecated, kept for reference)
-def fetch_school_skills_from_powerbi(codigo_inep: str) -> List[Dict]:
-    """DEPRECATED: Use fetch_school_skills_from_supabase instead. PowerBI calls are slow (5-30s)."""
-    return fetch_school_skills_from_supabase(codigo_inep)
+def get_available_years() -> List[int]:
+    """Get list of years with school skills data."""
+    supabase = get_supabase()
+    if not supabase:
+        return [2024]
+
+    try:
+        result = supabase.table("school_skills").select("ano").limit(1000).execute()
+        anos = sorted(set(r["ano"] for r in result.data), reverse=True)
+        return anos if anos else [2024]
+    except Exception:
+        return [2024]
 
 
 class SchoolScore(BaseModel):
@@ -605,14 +614,17 @@ async def get_all_skills(
 @router.get("/{codigo_inep}/skills")
 async def get_school_skills(
     codigo_inep: str,
-    limit: int = Query(10, ge=1, le=30)
+    limit: int = Query(10, ge=1, le=30),
+    ano: Optional[int] = Query(None, description="Year of data (defaults to latest)")
 ):
     """
     Get skill performance for a specific school.
     Returns the worst performing skills compared to national average.
+
+    - **ano**: Year of data (2024, 2025, etc.). If not specified, returns latest available.
     """
-    # Fetch school-specific skills from PowerBI
-    school_skills = fetch_school_skills_from_powerbi(codigo_inep)
+    # Fetch school-specific skills from Supabase (local database)
+    school_skills = fetch_school_skills_from_supabase(codigo_inep, ano=ano)
 
     if not school_skills:
         raise HTTPException(status_code=404, detail=f"Skills data not available for school {codigo_inep}")
@@ -677,9 +689,13 @@ async def get_school_skills(
             "status": "above" if diff and diff > 0 else "below" if diff and diff < 0 else "equal"
         })
 
+    # Get actual year from data (in case ano was not specified)
+    actual_ano = school_skills[0].get("ano", 2024) if school_skills else (ano or 2024)
+
     return {
         "codigo_inep": codigo_inep,
-        "ano": 2024,
+        "ano": actual_ano,
+        "available_years": get_available_years(),
         "total_skills": len(school_skills),
         "worst_overall": worst_overall,
         "by_area": skills_by_area
