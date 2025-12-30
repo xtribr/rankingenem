@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-// API URL from environment variable (Fly.io backend)
+// API URL from environment variable (Fly.io backend - updated)
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 // Debug log
