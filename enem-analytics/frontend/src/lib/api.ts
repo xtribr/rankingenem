@@ -1,11 +1,22 @@
-import { getToken, removeToken, User } from './auth';
+import { supabase } from './supabase';
 
-// Hardcoded API URL - use env var at build time via string replacement
-export const API_BASE = 'https://alert-trust-production.up.railway.app';
+// API URL from environment variable (Fly.io backend)
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 // Debug log
 if (typeof window !== 'undefined') {
   console.log('[API_BASE]', API_BASE);
+}
+
+// User type for admin APIs
+export interface User {
+  id: string;
+  codigo_inep: string;
+  nome_escola: string;
+  email?: string;
+  is_active: boolean;
+  is_admin: boolean;
+  created_at?: string;
 }
 
 export interface SchoolScore {
@@ -401,33 +412,100 @@ export interface SchoolHistory {
   }[];
 }
 
+// Helper to get session with retry - handles Supabase cold start
+async function getSessionWithRetry(maxAttempts = 2): Promise<string | null> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const timeoutMs = attempt === 1 ? 8000 : 5000; // Longer first attempt for cold start
+      console.log(`[getSession] Attempt ${attempt}...`);
+
+      const sessionPromise = supabase.auth.getSession();
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Session timeout')), timeoutMs)
+      );
+      const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
+
+      if (session?.access_token) {
+        console.log(`[getSession] Success on attempt ${attempt}`);
+        return session.access_token;
+      }
+      console.warn(`[getSession] No token on attempt ${attempt}`);
+      return null;
+    } catch {
+      console.warn(`[getSession] Attempt ${attempt} timed out`);
+      if (attempt < maxAttempts) {
+        console.log('[getSession] Retrying...');
+        continue;
+      }
+    }
+  }
+  console.error('[getSession] All attempts failed');
+  return null;
+}
+
 async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const token = getToken();
+  console.log(`[fetchAPI] ${options?.method || 'GET'} ${endpoint}`);
+
+  // Get token from Supabase session with retry
+  const token = await getSessionWithRetry();
+
+  if (!token) {
+    console.error('[fetchAPI] No auth token available');
+    throw new Error('Não foi possível obter sessão. Tente recarregar a página.');
+  }
+
   const headers: HeadersInit = {
     ...options?.headers,
+    'Authorization': `Bearer ${token}`,
   };
 
-  if (token) {
-    (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
-  }
+  try {
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      ...options,
+      headers,
+    });
 
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers,
-  });
+    console.log(`[fetchAPI] Response: ${response.status}`);
 
-  if (response.status === 401) {
-    removeToken();
-    if (typeof window !== 'undefined') {
-      window.location.href = '/login';
+    if (response.status === 401) {
+      // Sign out from Supabase and redirect to login
+      console.warn('[fetchAPI] 401 - signing out');
+      await supabase.auth.signOut();
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+      throw new Error('Sessão expirada');
     }
-    throw new Error('Sessão expirada');
-  }
 
-  if (!response.ok) {
-    throw new Error(`API Error: ${response.status}`);
+    if (!response.ok) {
+      // Try to get error message from response
+      let errorMessage = `Erro: ${response.status}`;
+      try {
+        const errorData = await response.json();
+        if (errorData.detail) {
+          errorMessage = errorData.detail;
+        }
+      } catch {
+        // Ignore JSON parse errors
+      }
+      console.error(`[fetchAPI] Error: ${errorMessage}`);
+      throw new Error(errorMessage);
+    }
+
+    // Handle 204 No Content (for DELETE operations)
+    if (response.status === 204) {
+      console.log('[fetchAPI] 204 No Content - success');
+      return undefined as T;
+    }
+
+    return response.json();
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('fetch')) {
+      console.error('[fetchAPI] Network error:', error);
+      throw new Error('Erro de conexão. Verifique sua internet.');
+    }
+    throw error;
   }
-  return response.json();
 }
 
 export const api = {
@@ -857,6 +935,9 @@ export const api = {
         target: string;
         weight: number;
         type: string;
+        similarity?: number;
+        match_type?: string;
+        via?: string;
       }[];
       stats: {
         total_nodes: number;
@@ -864,6 +945,49 @@ export const api = {
         concept_nodes: number;
         semantic_nodes: number;
         lexical_nodes: number;
+        interdisciplinary_edges?: number;
+        similarity_edges?: number;
+      };
+      similarity_audit?: {
+        exact_duplicates: number;
+        similar_labels: number;
+        suggested_connections: number;
+        total_similarity_edges: number;
+        details: {
+          duplicates: Array<{
+            node1_id: string;
+            node2_id: string;
+            label1: string;
+            label2: string;
+            area1: string;
+            area2: string;
+            similarity: number;
+            is_cross_area: boolean;
+            match_type: string;
+          }>;
+          similar: Array<{
+            node1_id: string;
+            node2_id: string;
+            label1: string;
+            label2: string;
+            area1: string;
+            area2: string;
+            similarity: number;
+            is_cross_area: boolean;
+            match_type: string;
+          }>;
+          suggested: Array<{
+            node1_id: string;
+            node2_id: string;
+            label1: string;
+            label2: string;
+            area1: string;
+            area2: string;
+            similarity: number;
+            is_cross_area: boolean;
+            match_type: string;
+          }>;
+        };
       };
     }>(`/api/gliner/school/${codigo_inep}/knowledge-graph${area ? `?area=${area}` : ''}`),
 
@@ -917,7 +1041,7 @@ export const api = {
   listUsers: (skip = 0, limit = 100) =>
     fetchAPI<User[]>(`/api/admin/users?skip=${skip}&limit=${limit}`),
 
-  getUser: (userId: number) =>
+  getUser: (userId: string) =>
     fetchAPI<User>(`/api/admin/users/${userId}`),
 
   createUser: (data: { codigo_inep: string; nome_escola: string; email: string; password: string; is_admin?: boolean }) =>
@@ -927,19 +1051,64 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  updateUser: (userId: number, data: { nome_escola?: string; email?: string; password?: string; is_active?: boolean; is_admin?: boolean }) =>
+  updateUser: (userId: string, data: { nome_escola?: string; is_active?: boolean; is_admin?: boolean; password?: string }) =>
     fetchAPI<User>(`/api/admin/users/${userId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }),
 
-  deleteUser: (userId: number) =>
-    fetch(`${API_BASE}/api/admin/users/${userId}`, {
+  deleteUser: (userId: string) =>
+    fetchAPI<void>(`/api/admin/users/${userId}`, {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${getToken()}` },
     }),
 
   getAdminStats: () =>
     fetchAPI<{ total_users: number; active_users: number; inactive_users: number; admin_users: number }>('/api/admin/stats'),
+
+  // Oracle Recommendations - ENEM 2026 Predictions + School Performance
+  getOracleRecommendations: (codigo_inep: string, limit = 10) =>
+    fetchAPI<{
+      codigo_inep: string;
+      ano_dados: number;
+      ano_predicao: number;
+      metodologia: string;
+      total_recommendations: number;
+      summary: {
+        high_priority: number;
+        medium_priority: number;
+        low_priority: number;
+        message: string;
+      };
+      recommendations: {
+        rank: number;
+        tema: string;
+        area: string;
+        area_codigo: string;
+        tipo: string;
+        probabilidade: number;
+        probabilidade_pct: number;
+        school_avg_performance: number | null;
+        priority_score: number;
+        matched_skills: number;
+        habilidades: {
+          codigo: string;
+          skill_num: number;
+          descricao: string;
+          school_performance: number;
+          status: 'weak' | 'medium' | 'strong';
+        }[];
+        justificativa: string;
+        exemplos_questoes: string[];
+        objetos_conhecimento: { tema: string; descricao: string }[];
+      }[];
+      top_5_urgentes: {
+        tema: string;
+        area: string;
+        probabilidade_pct: number;
+        school_performance: number | null;
+        priority_score: number;
+        mensagem: string;
+      }[];
+    }>(`/api/schools/${codigo_inep}/recommendations?limit=${limit}`),
 };
