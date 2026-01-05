@@ -285,6 +285,46 @@ export interface RoadmapResult {
   success_stories: SuccessStory[];
 }
 
+// Diagnosis Comparison Types
+export interface DiagnosisComparisonArea {
+  area: string;
+  area_name: string;
+  school_1_score: number;
+  school_2_score: number;
+  difference: number;
+  school_1_status: 'excellent' | 'good' | 'needs_attention' | 'critical';
+  school_2_status: 'excellent' | 'good' | 'needs_attention' | 'critical';
+}
+
+export interface DiagnosisComparisonResult {
+  school_1: {
+    codigo_inep: string;
+    info: {
+      codigo_inep: string;
+      nome_escola: string;
+      porte: number | null;
+      tipo_escola: string | null;
+      localizacao: string | null;
+      ano: number;
+    };
+    overall_health: 'excellent' | 'good' | 'needs_attention' | 'critical';
+  };
+  school_2: {
+    codigo_inep: string;
+    info: {
+      codigo_inep: string;
+      nome_escola: string;
+      porte: number | null;
+      tipo_escola: string | null;
+      localizacao: string | null;
+      ano: number;
+    };
+    overall_health: 'excellent' | 'good' | 'needs_attention' | 'critical';
+  };
+  area_comparison: DiagnosisComparisonArea[];
+  winner_by_area: Record<string, string>;
+}
+
 // TRI Analysis Types
 export interface TRIContentSample {
   skill: string;
@@ -648,6 +688,9 @@ export const api = {
       total_potential_gain: number;
       priority_area: string | null;
     }>(`/api/diagnosis/${codigo_inep}/improvement-potential`),
+
+  compareDiagnosis: (inep1: string, inep2: string) =>
+    fetchAPI<DiagnosisComparisonResult>(`/api/diagnosis/compare/${inep1}/${inep2}`),
 
   // ML APIs - Clustering
   getSchoolCluster: (codigo_inep: string) =>
@@ -1065,50 +1108,4 @@ export const api = {
 
   getAdminStats: () =>
     fetchAPI<{ total_users: number; active_users: number; inactive_users: number; admin_users: number }>('/api/admin/stats'),
-
-  // Oracle Recommendations - ENEM 2026 Predictions + School Performance
-  getOracleRecommendations: (codigo_inep: string, limit = 10) =>
-    fetchAPI<{
-      codigo_inep: string;
-      ano_dados: number;
-      ano_predicao: number;
-      metodologia: string;
-      total_recommendations: number;
-      summary: {
-        high_priority: number;
-        medium_priority: number;
-        low_priority: number;
-        message: string;
-      };
-      recommendations: {
-        rank: number;
-        tema: string;
-        area: string;
-        area_codigo: string;
-        tipo: string;
-        probabilidade: number;
-        probabilidade_pct: number;
-        school_avg_performance: number | null;
-        priority_score: number;
-        matched_skills: number;
-        habilidades: {
-          codigo: string;
-          skill_num: number;
-          descricao: string;
-          school_performance: number;
-          status: 'weak' | 'medium' | 'strong';
-        }[];
-        justificativa: string;
-        exemplos_questoes: string[];
-        objetos_conhecimento: { tema: string; descricao: string }[];
-      }[];
-      top_5_urgentes: {
-        tema: string;
-        area: string;
-        probabilidade_pct: number;
-        school_performance: number | null;
-        priority_score: number;
-        mensagem: string;
-      }[];
-    }>(`/api/schools/${codigo_inep}/recommendations?limit=${limit}`),
 };
