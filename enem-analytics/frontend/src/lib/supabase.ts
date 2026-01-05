@@ -5,7 +5,7 @@
  * It replaces the custom JWT-based auth system.
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, Session } from '@supabase/supabase-js';
 
 // Environment variables
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -85,15 +85,107 @@ export async function getSession() {
 }
 
 /**
+ * Fetch profile with retry logic for Supabase cold start
+ */
+async function fetchProfileWithRetry(userId: string, maxRetries = 2): Promise<UserProfile | null> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const timeout = attempt === 1 ? 8000 : 5000; // Longer timeout for first attempt (cold start)
+      const profilePromise = supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), timeout)
+      );
+
+      const { data, error } = await Promise.race([profilePromise, timeoutPromise]) as Awaited<typeof profilePromise>;
+
+      if (error) {
+        console.warn(`[fetchProfile] Attempt ${attempt} error:`, error.message);
+        if (attempt < maxRetries) continue;
+        return null;
+      }
+
+      console.log(`[fetchProfile] Success on attempt ${attempt}:`, data?.codigo_inep);
+      return data;
+    } catch (e) {
+      console.warn(`[fetchProfile] Attempt ${attempt} timed out`);
+      if (attempt < maxRetries) {
+        console.log('[fetchProfile] Retrying...');
+        continue;
+      }
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Get user from session - fetches profile from database for accurate is_admin status
+ */
+export async function getUserFromSession(session: Session): Promise<User | null> {
+  try {
+    console.log('[getUserFromSession] Fetching profile for:', session.user.email);
+
+    // Fetch profile from database - this is the source of truth for is_admin
+    const profile = await fetchProfileWithRetry(session.user.id);
+
+    if (profile) {
+      console.log('[getUserFromSession] Profile found, is_admin:', profile.is_admin);
+      return {
+        id: session.user.id,
+        email: session.user.email || '',
+        codigo_inep: profile.codigo_inep || '',
+        nome_escola: profile.nome_escola || '',
+        is_admin: profile.is_admin || false,
+        is_active: profile.is_active ?? true,
+        created_at: session.user.created_at,
+      };
+    }
+
+    // Fallback to user_metadata if profile not found
+    console.warn('[getUserFromSession] Profile not found, falling back to user_metadata');
+    return {
+      id: session.user.id,
+      email: session.user.email || '',
+      codigo_inep: session.user.user_metadata?.codigo_inep || '',
+      nome_escola: session.user.user_metadata?.nome_escola || '',
+      is_admin: session.user.user_metadata?.is_admin || false,
+      is_active: true,
+      created_at: session.user.created_at,
+    };
+  } catch (error) {
+    console.error('[getUserFromSession] Unexpected error:', error);
+    return null;
+  }
+}
+
+/**
  * Get current user with profile data
  */
 export async function getCurrentUser(): Promise<User | null> {
   try {
     console.log('[getCurrentUser] Getting session...');
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-    if (sessionError) {
-      console.error('[getCurrentUser] Session error:', sessionError);
+    // Add timeout to getSession to prevent hanging
+    const sessionPromise = supabase.auth.getSession();
+    const sessionTimeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Session fetch timeout')), 5000)
+    );
+
+    let session = null;
+    try {
+      const result = await Promise.race([sessionPromise, sessionTimeout]);
+      session = result.data?.session;
+      if (result.error) {
+        console.error('[getCurrentUser] Session error:', result.error);
+        return null;
+      }
+    } catch {
+      console.warn('[getCurrentUser] Session fetch timed out');
       return null;
     }
 
@@ -102,56 +194,7 @@ export async function getCurrentUser(): Promise<User | null> {
       return null;
     }
 
-    console.log('[getCurrentUser] Session found, fetching profile for:', session.user.id);
-
-    // Fetch profile data with timeout
-    const profilePromise = supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', session.user.id)
-      .single();
-
-    // Add timeout to prevent hanging
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Profile fetch timeout')), 5000)
-    );
-
-    let profile = null;
-    try {
-      const { data, error } = await Promise.race([profilePromise, timeoutPromise]) as Awaited<typeof profilePromise>;
-      if (error) {
-        console.warn('[getCurrentUser] Profile fetch error:', error.message);
-      } else {
-        profile = data;
-        console.log('[getCurrentUser] Profile fetched:', profile?.codigo_inep);
-      }
-    } catch (timeoutError) {
-      console.warn('[getCurrentUser] Profile fetch timed out, using fallback');
-    }
-
-    if (!profile) {
-      // Return basic user from auth metadata
-      console.log('[getCurrentUser] Using auth metadata fallback');
-      return {
-        id: session.user.id,
-        email: session.user.email || '',
-        codigo_inep: session.user.user_metadata?.codigo_inep || '',
-        nome_escola: session.user.user_metadata?.nome_escola || '',
-        is_admin: session.user.user_metadata?.is_admin || false,
-        is_active: true,
-        created_at: session.user.created_at,
-      };
-    }
-
-    return {
-      id: session.user.id,
-      email: session.user.email || '',
-      codigo_inep: profile.codigo_inep,
-      nome_escola: profile.nome_escola,
-      is_admin: profile.is_admin || false,
-      is_active: profile.is_active !== false,
-      created_at: profile.created_at,
-    };
+    return getUserFromSession(session);
   } catch (error) {
     console.error('[getCurrentUser] Unexpected error:', error);
     return null;

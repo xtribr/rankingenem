@@ -1,10 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { api } from '@/lib/api';
-import { User } from '@/lib/auth';
+import { api, User } from '@/lib/api';
 import {
   Users,
   Plus,
@@ -18,7 +17,15 @@ import {
   ShieldOff,
   Eye,
   EyeOff,
+  Loader2,
 } from 'lucide-react';
+
+interface SchoolSearchResult {
+  codigo_inep: string;
+  nome_escola: string;
+  uf: string | null;
+  ultimo_ano: number;
+}
 
 interface UserFormData {
   codigo_inep: string;
@@ -52,15 +59,84 @@ function UserModal({
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // School search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SchoolSearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Search schools with debounce
+  const searchSchools = useCallback(async (query: string) => {
+    if (query.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const results = await api.searchSchools(query, 15);
+      setSearchResults(results);
+      setShowDropdown(true);
+    } catch (err) {
+      console.error('Search error:', err);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  }, []);
+
+  // Handle search input change with debounce
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+
+    // Clear previous timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    // Debounce search
+    searchTimeoutRef.current = setTimeout(() => {
+      searchSchools(value);
+    }, 300);
+  };
+
+  // Handle school selection
+  const handleSelectSchool = (school: SchoolSearchResult) => {
+    setFormData({
+      ...formData,
+      codigo_inep: school.codigo_inep,
+      nome_escola: school.nome_escola,
+    });
+    setSearchQuery(school.nome_escola);
+    setShowDropdown(false);
+    setSearchResults([]);
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   useEffect(() => {
     if (user && isEdit) {
       setFormData({
         codigo_inep: user.codigo_inep,
         nome_escola: user.nome_escola,
-        email: user.email,
+        email: user.email || '',
         password: '',
         is_admin: user.is_admin,
       });
+      setSearchQuery(user.nome_escola);
     } else {
       setFormData({
         codigo_inep: '',
@@ -69,8 +145,11 @@ function UserModal({
         password: '',
         is_admin: false,
       });
+      setSearchQuery('');
     }
     setError('');
+    setSearchResults([]);
+    setShowDropdown(false);
   }, [user, isEdit, isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -80,11 +159,12 @@ function UserModal({
 
     try {
       if (isEdit && user) {
-        const updateData: Record<string, string | boolean> = {
+        // Update user - now supports password changes via Supabase Auth
+        const updateData: { nome_escola: string; is_admin: boolean; password?: string } = {
           nome_escola: formData.nome_escola,
-          email: formData.email,
           is_admin: formData.is_admin,
         };
+        // Only include password if provided
         if (formData.password) {
           updateData.password = formData.password;
         }
@@ -128,34 +208,69 @@ function UserModal({
         )}
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
+          {/* School Search Dropdown */}
+          <div ref={dropdownRef} className="relative">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Código INEP *
+              Buscar Escola *
             </label>
-            <input
-              type="text"
-              required
-              disabled={isEdit}
-              value={formData.codigo_inep}
-              onChange={(e) => setFormData({ ...formData, codigo_inep: e.target.value })}
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20 outline-none transition-all text-gray-900 disabled:bg-gray-100"
-              placeholder="12345678"
-              maxLength={8}
-            />
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                required={!isEdit}
+                disabled={isEdit}
+                value={searchQuery}
+                onChange={handleSearchChange}
+                onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
+                className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-200 focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20 outline-none transition-all text-gray-900 disabled:bg-gray-100"
+                placeholder="Digite o nome da escola..."
+              />
+              {isSearching && (
+                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 animate-spin" />
+              )}
+            </div>
+
+            {/* Dropdown Results */}
+            {showDropdown && searchResults.length > 0 && (
+              <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                {searchResults.map((school) => (
+                  <button
+                    key={school.codigo_inep}
+                    type="button"
+                    onClick={() => handleSelectSchool(school)}
+                    className="w-full px-4 py-3 text-left hover:bg-sky-50 transition-colors border-b border-gray-100 last:border-b-0"
+                  >
+                    <div className="font-medium text-gray-900 text-sm">{school.nome_escola}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      INEP: {school.codigo_inep} • {school.uf || 'N/A'}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {showDropdown && searchQuery.length >= 2 && searchResults.length === 0 && !isSearching && (
+              <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-4 text-center text-gray-500 text-sm">
+                Nenhuma escola encontrada
+              </div>
+            )}
           </div>
 
+          {/* INEP Code (readonly, auto-filled) */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Nome da Escola *
+              Código INEP
             </label>
             <input
               type="text"
-              required
-              value={formData.nome_escola}
-              onChange={(e) => setFormData({ ...formData, nome_escola: e.target.value })}
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20 outline-none transition-all text-gray-900"
-              placeholder="Nome completo da escola"
+              readOnly
+              value={formData.codigo_inep}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-gray-900 font-mono"
+              placeholder="Selecione uma escola acima"
             />
+            {!formData.codigo_inep && !isEdit && (
+              <p className="text-xs text-gray-500 mt-1">O código será preenchido automaticamente</p>
+            )}
           </div>
 
           <div>
@@ -252,7 +367,7 @@ export default function UsersPage() {
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !isAdmin) {
@@ -260,12 +375,17 @@ export default function UsersPage() {
     }
   }, [authLoading, isAdmin, router]);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const loadUsers = async () => {
+    setLoadError(null);
     try {
       const data = await api.listUsers();
       setUsers(data);
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao carregar usuários';
       console.error('Error loading users:', error);
+      setLoadError(message);
     } finally {
       setIsLoading(false);
     }
@@ -277,24 +397,40 @@ export default function UsersPage() {
     }
   }, [isAdmin]);
 
-  const handleDelete = async (userId: number) => {
-    if (!confirm('Deseja realmente desativar este usuário?')) return;
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  const handleDelete = async (userId: string) => {
+    console.log('[handleDelete] User clicked delete for:', userId);
+    if (!confirm('Deseja realmente desativar este usuário?')) {
+      console.log('[handleDelete] User cancelled');
+      return;
+    }
+
+    console.log('[handleDelete] Starting delete...');
+    setDeleteError(null);
     setDeletingId(userId);
     try {
+      console.log('[handleDelete] Calling api.deleteUser...');
       await api.deleteUser(userId);
-      loadUsers();
+      console.log('[handleDelete] Delete successful, reloading users...');
+      await loadUsers();
+      console.log('[handleDelete] Users reloaded');
     } catch (error) {
-      console.error('Error deleting user:', error);
+      const message = error instanceof Error ? error.message : 'Erro ao desativar usuário';
+      console.error('[handleDelete] Error:', error);
+      setDeleteError(message);
+      // Clear error after 10 seconds
+      setTimeout(() => setDeleteError(null), 10000);
     } finally {
       setDeletingId(null);
+      console.log('[handleDelete] Done');
     }
   };
 
   const filteredUsers = users.filter(
     (user) =>
       user.nome_escola.toLowerCase().includes(search.toLowerCase()) ||
-      user.email.toLowerCase().includes(search.toLowerCase()) ||
+      (user.email && user.email.toLowerCase().includes(search.toLowerCase())) ||
       user.codigo_inep.includes(search)
   );
 
@@ -337,6 +473,28 @@ export default function UsersPage() {
           className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20 outline-none transition-all text-gray-900"
         />
       </div>
+
+      {/* Error Alerts */}
+      {(deleteError || loadError) && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700">
+          <AlertCircle className="h-5 w-5 flex-shrink-0" />
+          <span>{deleteError || loadError}</span>
+          {loadError && (
+            <button
+              onClick={() => { setIsLoading(true); loadUsers(); }}
+              className="ml-2 px-3 py-1 bg-red-100 hover:bg-red-200 rounded-lg text-sm font-medium"
+            >
+              Tentar novamente
+            </button>
+          )}
+          <button
+            onClick={() => { setDeleteError(null); setLoadError(null); }}
+            className="ml-auto p-1 hover:bg-red-100 rounded-full"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Users Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
