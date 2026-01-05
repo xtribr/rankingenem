@@ -120,7 +120,7 @@ export default function BarComparison({
             formatter={(value) => <span className="text-sm text-gray-700">{value}</span>}
           />
 
-          <Bar dataKey="escola1" name={school1Label} radius={[0, 4, 4, 0]}>
+          <Bar dataKey="escola1" name={school1Label} fill="#3b82f6" radius={[0, 4, 4, 0]}>
             {chartData.map((entry, index) => (
               <Cell
                 key={`cell-1-${index}`}
@@ -128,7 +128,7 @@ export default function BarComparison({
               />
             ))}
           </Bar>
-          <Bar dataKey="escola2" name={school2Label} radius={[0, 4, 4, 0]}>
+          <Bar dataKey="escola2" name={school2Label} fill="#22c55e" radius={[0, 4, 4, 0]}>
             {chartData.map((entry, index) => (
               <Cell
                 key={`cell-2-${index}`}
