@@ -50,32 +50,54 @@ export default function PDFExportModal({
     const colorProps = [
       'color', 'background-color', 'border-color',
       'border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color',
-      'outline-color', 'text-decoration-color', 'fill', 'stroke'
+      'outline-color', 'text-decoration-color', 'fill', 'stroke', 'box-shadow'
     ];
+
+    // Create a shared canvas for color conversion
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext('2d');
+
+    const convertToRGB = (color: string): string => {
+      if (!color || color === 'none' || color === 'transparent' ||
+          color === 'inherit' || color === 'initial' || color === 'currentcolor') {
+        return color;
+      }
+      // If already rgb/hex, return as is
+      if (color.startsWith('rgb') || color.startsWith('#')) {
+        return color;
+      }
+      // Use canvas to convert any color format to hex
+      if (ctx) {
+        ctx.fillStyle = '#000000'; // Reset
+        ctx.fillStyle = color;
+        return ctx.fillStyle; // Returns #hex format
+      }
+      return color;
+    };
 
     const processElement = (el: HTMLElement) => {
       const computed = getComputedStyle(el);
 
+      // Apply all color properties as inline styles with RGB values
       colorProps.forEach(prop => {
         const value = computed.getPropertyValue(prop);
-        if (value && value !== 'none' && value !== 'transparent' &&
-            value !== 'inherit' && value !== 'initial' && value !== 'currentcolor') {
-          // Force browser to convert any color format to rgb by reading computed style
-          // and applying it as inline style
-          if (value.startsWith('rgb') || value.startsWith('#')) {
-            el.style.setProperty(prop, value);
-          } else {
-            // For lab/oklch colors, use canvas to convert to RGB
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-              ctx.fillStyle = value;
-              const rgbValue = ctx.fillStyle; // Canvas always returns #hex or rgb()
-              el.style.setProperty(prop, rgbValue);
-            }
+        if (value && value !== 'none' && value !== 'transparent') {
+          const converted = convertToRGB(value);
+          if (converted !== value) {
+            el.style.setProperty(prop, converted, 'important');
+          } else if (value.startsWith('rgb') || value.startsWith('#')) {
+            el.style.setProperty(prop, value, 'important');
           }
         }
       });
+
+      // Also set background explicitly to avoid inheritance issues
+      const bgColor = computed.backgroundColor;
+      if (bgColor && bgColor !== 'transparent' && bgColor !== 'rgba(0, 0, 0, 0)') {
+        el.style.setProperty('background-color', convertToRGB(bgColor), 'important');
+      }
 
       // Process children
       Array.from(el.children).forEach(child => {
@@ -101,14 +123,68 @@ export default function PDFExportModal({
       // Get selected section IDs
       const selectedIds = sections.filter(s => s.checked).map(s => s.id);
 
+      // Create a wrapper with forced sRGB colors via CSS override
+      const wrapper = document.createElement('div');
+      wrapper.id = 'pdf-export-wrapper';
+
+      // Inject CSS that overrides Tailwind's lab() colors with fallback sRGB values
+      const styleOverride = document.createElement('style');
+      styleOverride.textContent = `
+        #pdf-export-wrapper, #pdf-export-wrapper * {
+          color-scheme: light !important;
+          forced-color-adjust: none !important;
+        }
+        #pdf-export-wrapper {
+          --color-blue-50: #eff6ff !important;
+          --color-blue-100: #dbeafe !important;
+          --color-blue-200: #bfdbfe !important;
+          --color-blue-500: #3b82f6 !important;
+          --color-blue-600: #2563eb !important;
+          --color-blue-700: #1d4ed8 !important;
+          --color-green-50: #f0fdf4 !important;
+          --color-green-100: #dcfce7 !important;
+          --color-green-200: #bbf7d0 !important;
+          --color-green-500: #22c55e !important;
+          --color-green-600: #16a34a !important;
+          --color-green-700: #15803d !important;
+          --color-red-50: #fef2f2 !important;
+          --color-red-500: #ef4444 !important;
+          --color-red-600: #dc2626 !important;
+          --color-amber-50: #fffbeb !important;
+          --color-amber-500: #f59e0b !important;
+          --color-amber-600: #d97706 !important;
+          --color-purple-50: #faf5ff !important;
+          --color-purple-500: #a855f7 !important;
+          --color-purple-600: #9333ea !important;
+          --color-pink-50: #fdf2f8 !important;
+          --color-pink-500: #ec4899 !important;
+          --color-pink-600: #db2777 !important;
+          --color-gray-50: #f9fafb !important;
+          --color-gray-100: #f3f4f6 !important;
+          --color-gray-200: #e5e7eb !important;
+          --color-gray-300: #d1d5db !important;
+          --color-gray-400: #9ca3af !important;
+          --color-gray-500: #6b7280 !important;
+          --color-gray-600: #4b5563 !important;
+          --color-gray-700: #374151 !important;
+          --color-gray-800: #1f2937 !important;
+          --color-gray-900: #111827 !important;
+        }
+      `;
+      wrapper.appendChild(styleOverride);
+
       // Clone the content
       const content = contentRef.current.cloneNode(true) as HTMLElement;
+      wrapper.appendChild(content);
 
-      // Force all colors to RGB format for html2canvas (Tailwind v4 uses lab/oklch)
-      document.body.appendChild(content);
-      content.style.position = 'absolute';
-      content.style.left = '-9999px';
-      content.style.width = contentRef.current.offsetWidth + 'px';
+      // Add wrapper to DOM for style computation
+      document.body.appendChild(wrapper);
+      wrapper.style.position = 'absolute';
+      wrapper.style.left = '-9999px';
+      wrapper.style.width = contentRef.current.offsetWidth + 'px';
+      wrapper.style.backgroundColor = '#ffffff';
+
+      // Force RGB colors on all elements
       forceRGBColors(content);
 
       // Hide unselected sections
@@ -160,6 +236,10 @@ export default function PDFExportModal({
           scale: 2,
           useCORS: true,
           logging: false,
+          // Ignore external stylesheets to avoid lab() color parsing issues
+          ignoreElements: (element: Element) => {
+            return element.tagName === 'LINK' && element.getAttribute('rel') === 'stylesheet';
+          },
         },
         jsPDF: {
           unit: 'mm' as const,
@@ -169,12 +249,12 @@ export default function PDFExportModal({
         pagebreak: { mode: 'avoid-all' as const },
       };
 
-      // Generate PDF
-      await html2pdf().set(opt).from(content).save();
+      // Generate PDF from wrapper (which contains the style overrides)
+      await html2pdf().set(opt).from(wrapper).save();
 
-      // Cleanup: remove cloned content from DOM
-      if (content.parentNode) {
-        content.parentNode.removeChild(content);
+      // Cleanup: remove wrapper from DOM
+      if (wrapper.parentNode) {
+        wrapper.parentNode.removeChild(wrapper);
       }
 
       setExportSuccess(true);
@@ -185,9 +265,9 @@ export default function PDFExportModal({
     } catch (error) {
       console.error('Error exporting PDF:', error);
       // Cleanup on error
-      const orphanedContent = document.querySelector('[style*="-9999px"]');
-      if (orphanedContent?.parentNode) {
-        orphanedContent.parentNode.removeChild(orphanedContent);
+      const orphanedWrapper = document.getElementById('pdf-export-wrapper');
+      if (orphanedWrapper?.parentNode) {
+        orphanedWrapper.parentNode.removeChild(orphanedWrapper);
       }
       alert('Erro ao exportar PDF. Tente novamente.');
     } finally {
