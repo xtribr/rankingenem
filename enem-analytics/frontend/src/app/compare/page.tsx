@@ -28,17 +28,17 @@ export default function ComparePage() {
   const [showPdfModal, setShowPdfModal] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Search queries
-  const { data: results1 } = useQuery({
+  // Search queries - start with 1 char, show 10 results
+  const { data: results1, isLoading: searching1 } = useQuery({
     queryKey: ['search', search1],
-    queryFn: () => api.searchSchools(search1, 5),
-    enabled: search1.length >= 2,
+    queryFn: () => api.searchSchools(search1, 10),
+    enabled: search1.length >= 1,
   });
 
-  const { data: results2 } = useQuery({
+  const { data: results2, isLoading: searching2 } = useQuery({
     queryKey: ['search', search2],
-    queryFn: () => api.searchSchools(search2, 5),
-    enabled: search2.length >= 2,
+    queryFn: () => api.searchSchools(search2, 10),
+    enabled: search2.length >= 1,
   });
 
   // Basic comparison (existing endpoint)
@@ -151,7 +151,7 @@ export default function ComparePage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Buscar escola..."
+              placeholder="Digite para buscar escola..."
               value={search1}
               onChange={(e) => {
                 setSearch1(e.target.value);
@@ -160,22 +160,36 @@ export default function ComparePage() {
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
             />
           </div>
-          {results1 && search1.length >= 2 && !school1 && (
-            <div className="mt-2 border border-gray-200 rounded-lg overflow-hidden">
+          {/* Loading state */}
+          {searching1 && search1.length >= 1 && !school1 && (
+            <div className="mt-2 p-3 text-center text-gray-500 text-sm">
+              Buscando escolas...
+            </div>
+          )}
+          {/* Results dropdown */}
+          {results1 && results1.length > 0 && search1.length >= 1 && !school1 && !searching1 && (
+            <div className="mt-2 border border-gray-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto shadow-lg">
               {results1.map((s) => (
                 <button
                   key={s.codigo_inep}
                   onClick={() => handleSelectSchool1(s.codigo_inep, s.nome_escola)}
-                  className="w-full px-4 py-2 text-left hover:bg-gray-50 border-b last:border-b-0"
+                  className="w-full px-4 py-3 text-left hover:bg-blue-50 border-b last:border-b-0 transition-colors"
                 >
-                  <p className="font-medium text-gray-900">{s.nome_escola}</p>
+                  <p className="font-medium text-gray-900 truncate">{s.nome_escola}</p>
                   <p className="text-sm text-gray-500">{s.uf} - {s.codigo_inep}</p>
                 </button>
               ))}
             </div>
           )}
+          {/* No results */}
+          {results1 && results1.length === 0 && search1.length >= 1 && !school1 && !searching1 && (
+            <div className="mt-2 p-3 text-center text-gray-500 text-sm bg-gray-50 rounded-lg">
+              Nenhuma escola encontrada
+            </div>
+          )}
+          {/* Selected school */}
           {school1 && (
-            <div className="mt-2 p-3 bg-blue-50 rounded-lg">
+            <div className="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
               <p className="font-medium text-blue-900">{school1Name}</p>
               <button
                 onClick={() => {
@@ -198,7 +212,7 @@ export default function ComparePage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Buscar escola..."
+              placeholder="Digite para buscar escola..."
               value={search2}
               onChange={(e) => {
                 setSearch2(e.target.value);
@@ -207,22 +221,36 @@ export default function ComparePage() {
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
             />
           </div>
-          {results2 && search2.length >= 2 && !school2 && (
-            <div className="mt-2 border border-gray-200 rounded-lg overflow-hidden">
+          {/* Loading state */}
+          {searching2 && search2.length >= 1 && !school2 && (
+            <div className="mt-2 p-3 text-center text-gray-500 text-sm">
+              Buscando escolas...
+            </div>
+          )}
+          {/* Results dropdown */}
+          {results2 && results2.length > 0 && search2.length >= 1 && !school2 && !searching2 && (
+            <div className="mt-2 border border-gray-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto shadow-lg">
               {results2.map((s) => (
                 <button
                   key={s.codigo_inep}
                   onClick={() => handleSelectSchool2(s.codigo_inep, s.nome_escola)}
-                  className="w-full px-4 py-2 text-left hover:bg-gray-50 border-b last:border-b-0"
+                  className="w-full px-4 py-3 text-left hover:bg-green-50 border-b last:border-b-0 transition-colors"
                 >
-                  <p className="font-medium text-gray-900">{s.nome_escola}</p>
+                  <p className="font-medium text-gray-900 truncate">{s.nome_escola}</p>
                   <p className="text-sm text-gray-500">{s.uf} - {s.codigo_inep}</p>
                 </button>
               ))}
             </div>
           )}
+          {/* No results */}
+          {results2 && results2.length === 0 && search2.length >= 1 && !school2 && !searching2 && (
+            <div className="mt-2 p-3 text-center text-gray-500 text-sm bg-gray-50 rounded-lg">
+              Nenhuma escola encontrada
+            </div>
+          )}
+          {/* Selected school */}
           {school2 && (
-            <div className="mt-2 p-3 bg-green-50 rounded-lg">
+            <div className="mt-2 p-3 bg-green-50 rounded-lg border border-green-200">
               <p className="font-medium text-green-900">{school2Name}</p>
               <button
                 onClick={() => {
