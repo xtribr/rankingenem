@@ -15,6 +15,7 @@ import {
   PDFExportModal,
   QuickWinsComparison,
   SuccessStoriesComparison,
+  TRIAnalysisComparison,
 } from '@/components/compare';
 
 export default function ComparePage() {
@@ -317,6 +318,16 @@ export default function ComparePage() {
               school1Name={school1Name}
               school2Name={school2Name}
               perspectiveSchool={1}
+            />
+          </div>
+
+          {/* TRI Analysis Comparison */}
+          <div data-section="tri-analysis">
+            <TRIAnalysisComparison
+              school1Code={school1!}
+              school2Code={school2!}
+              school1Name={school1Name}
+              school2Name={school2Name}
             />
           </div>
 

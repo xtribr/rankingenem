@@ -8,3 +8,4 @@ export { default as SimilarSchoolsSuggestions } from './SimilarSchoolsSuggestion
 export { default as PDFExportModal } from './PDFExportModal';
 export { default as QuickWinsComparison } from './QuickWinsComparison';
 export { default as SuccessStoriesComparison } from './SuccessStoriesComparison';
+export { default as TRIAnalysisComparison } from './TRIAnalysisComparison';
