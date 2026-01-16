@@ -6,3 +6,4 @@ export { default as CompetitiveAnalysis } from './CompetitiveAnalysis';
 export { default as RankingComparison } from './RankingComparison';
 export { default as SimilarSchoolsSuggestions } from './SimilarSchoolsSuggestions';
 export { default as PDFExportModal } from './PDFExportModal';
+export { default as QuickWinsComparison } from './QuickWinsComparison';
