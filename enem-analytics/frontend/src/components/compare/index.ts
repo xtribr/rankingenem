@@ -7,3 +7,4 @@ export { default as RankingComparison } from './RankingComparison';
 export { default as SimilarSchoolsSuggestions } from './SimilarSchoolsSuggestions';
 export { default as PDFExportModal } from './PDFExportModal';
 export { default as QuickWinsComparison } from './QuickWinsComparison';
+export { default as SuccessStoriesComparison } from './SuccessStoriesComparison';

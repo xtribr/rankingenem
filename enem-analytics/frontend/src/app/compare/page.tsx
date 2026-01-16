@@ -14,6 +14,7 @@ import {
   SimilarSchoolsSuggestions,
   PDFExportModal,
   QuickWinsComparison,
+  SuccessStoriesComparison,
 } from '@/components/compare';
 
 export default function ComparePage() {
@@ -322,6 +323,16 @@ export default function ComparePage() {
           {/* Quick Wins Comparison */}
           <div data-section="quickwins">
             <QuickWinsComparison
+              school1Code={school1!}
+              school2Code={school2!}
+              school1Name={school1Name}
+              school2Name={school2Name}
+            />
+          </div>
+
+          {/* Success Stories Comparison */}
+          <div data-section="success-stories">
+            <SuccessStoriesComparison
               school1Code={school1!}
               school2Code={school2!}
               school1Name={school1Name}
