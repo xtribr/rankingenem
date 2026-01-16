@@ -18,8 +18,17 @@ import {
   GraduationCap
 } from 'lucide-react';
 import {
+  SummaryCards,
+  RadarComparison,
+  BarComparison,
+  EvolutionChart,
+  CompetitiveAnalysis,
+  RankingComparison,
   SimilarSchoolsSuggestions,
   PDFExportModal,
+  QuickWinsComparison,
+  SuccessStoriesComparison,
+  TRIAnalysisComparison,
 } from '@/components/compare';
 import {
   ResponsiveContainer,
@@ -377,6 +386,18 @@ export default function ComparePage() {
               </div>
             </div>
 
+            {/* Export PDF Button */}
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowPdfModal(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-white transition-colors"
+                style={{ backgroundColor: COLORS.purple }}
+              >
+                <Download className="w-4 h-4" />
+                Exportar Relatório PDF
+              </button>
+            </div>
+
             {/* Main Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
@@ -387,15 +408,8 @@ export default function ComparePage() {
                     <div className="px-4 py-2 bg-gray-100 rounded-lg flex items-center gap-2">
                       <LineChart className="w-4 h-4 text-gray-600" />
                       <span className="text-sm font-medium text-gray-700">Evolução Histórica</span>
-                      <ChevronDown className="w-4 h-4 text-gray-400" />
                     </div>
                   </div>
-                  <button
-                    onClick={() => setShowPdfModal(true)}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <Download className="w-5 h-5 text-gray-500" />
-                  </button>
                 </div>
 
                 <div className="h-72">
@@ -459,9 +473,6 @@ export default function ComparePage() {
               <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold text-gray-800">Aproveitamento</h3>
-                  <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                    <Download className="w-5 h-5 text-gray-500" />
-                  </button>
                 </div>
 
                 {/* School 1 Radial */}
@@ -525,13 +536,10 @@ export default function ComparePage() {
               <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="font-semibold text-gray-800">Desempenho por Área</h3>
-                  <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                    <Download className="w-5 h-5 text-gray-500" />
-                  </button>
                 </div>
 
                 <div className="space-y-5">
-                  {areaData.map((area, idx) => (
+                  {areaData.map((area) => (
                     <div key={area.name}>
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-medium text-gray-700">{area.name}</span>
@@ -569,7 +577,6 @@ export default function ComparePage() {
                     <div className="px-4 py-2 bg-gray-100 rounded-lg flex items-center gap-2">
                       <BarChart3 className="w-4 h-4 text-gray-600" />
                       <span className="text-sm font-medium text-gray-700">Comparativo por Área</span>
-                      <ChevronDown className="w-4 h-4 text-gray-400" />
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -660,6 +667,65 @@ export default function ComparePage() {
                 </div>
               </div>
             </div>
+
+            {/* Radar Comparison */}
+            <RadarComparison
+              school1Name={school1Name}
+              school2Name={school2Name}
+              diagnosisComparison={diagnosisComparison}
+            />
+
+            {/* Ranking Comparison */}
+            <RankingComparison
+              school1={{
+                codigo_inep: school1 || '',
+                nome_escola: school1Name,
+                uf: comparison?.escola1?.uf,
+                ranking: {
+                  brasil: getLatestRanking(history1),
+                },
+              }}
+              school2={{
+                codigo_inep: school2 || '',
+                nome_escola: school2Name,
+                uf: comparison?.escola2?.uf,
+                ranking: {
+                  brasil: getLatestRanking(history2),
+                },
+              }}
+            />
+
+            {/* Competitive Analysis */}
+            <CompetitiveAnalysis
+              diagnosisComparison={diagnosisComparison}
+              school1Name={school1Name}
+              school2Name={school2Name}
+              perspectiveSchool={1}
+            />
+
+            {/* Quick Wins Comparison */}
+            <QuickWinsComparison
+              school1Code={school1!}
+              school2Code={school2!}
+              school1Name={school1Name}
+              school2Name={school2Name}
+            />
+
+            {/* Success Stories Comparison */}
+            <SuccessStoriesComparison
+              school1Code={school1!}
+              school2Code={school2!}
+              school1Name={school1Name}
+              school2Name={school2Name}
+            />
+
+            {/* TRI Analysis Comparison */}
+            <TRIAnalysisComparison
+              school1Code={school1!}
+              school2Code={school2!}
+              school1Name={school1Name}
+              school2Name={school2Name}
+            />
 
           </div>
         )}
