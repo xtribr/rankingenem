@@ -30,6 +30,9 @@ export default function PDFExportModal({
     { id: 'bars', label: 'Gráfico de Barras por Área', checked: true },
     { id: 'evolution', label: 'Evolução Histórica (2018-2024)', checked: true },
     { id: 'competitive', label: 'Análise de Pontos Fortes/Fracos', checked: true },
+    { id: 'tri-analysis', label: 'Análise TRI (proficiência)', checked: true },
+    { id: 'quickwins', label: 'Quick Wins (oportunidades)', checked: true },
+    { id: 'success-stories', label: 'Casos de Sucesso', checked: true },
     { id: 'rankings', label: 'Rankings e Posição Relativa', checked: true },
   ]);
   const [includeWatermark, setIncludeWatermark] = useState(true);
@@ -40,6 +43,54 @@ export default function PDFExportModal({
     setSections(prev =>
       prev.map(s => (s.id === id ? { ...s, checked: !s.checked } : s))
     );
+  };
+
+  // Convert modern CSS colors (lab, oklch) to rgb for html2canvas compatibility
+  const convertModernColors = (element: HTMLElement) => {
+    const convertColor = (color: string): string => {
+      if (!color || color === 'transparent' || color === 'inherit' || color === 'initial') {
+        return color;
+      }
+      // Check if it's a modern color function that needs conversion
+      if (color.includes('lab(') || color.includes('oklch(') || color.includes('oklab(')) {
+        // Create a temporary element to get computed rgb value
+        const temp = document.createElement('div');
+        temp.style.color = color;
+        temp.style.display = 'none';
+        document.body.appendChild(temp);
+        const computed = getComputedStyle(temp).color;
+        document.body.removeChild(temp);
+        return computed || color;
+      }
+      return color;
+    };
+
+    const processElement = (el: HTMLElement) => {
+      const computed = getComputedStyle(el);
+      const colorProps = [
+        'color', 'backgroundColor', 'borderColor',
+        'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor',
+        'outlineColor', 'textDecorationColor', 'caretColor'
+      ];
+
+      colorProps.forEach(prop => {
+        const cssProp = prop.replace(/([A-Z])/g, '-$1').toLowerCase();
+        const value = computed.getPropertyValue(cssProp);
+        if (value && (value.includes('lab(') || value.includes('oklch(') || value.includes('oklab('))) {
+          const converted = convertColor(value);
+          el.style.setProperty(cssProp, converted);
+        }
+      });
+
+      // Process children
+      Array.from(el.children).forEach(child => {
+        if (child instanceof HTMLElement) {
+          processElement(child);
+        }
+      });
+    };
+
+    processElement(element);
   };
 
   const handleExport = async () => {
@@ -57,6 +108,13 @@ export default function PDFExportModal({
 
       // Clone the content
       const content = contentRef.current.cloneNode(true) as HTMLElement;
+
+      // Convert modern CSS colors (lab, oklch) to rgb for html2canvas
+      document.body.appendChild(content);
+      content.style.position = 'absolute';
+      content.style.left = '-9999px';
+      convertModernColors(content);
+      document.body.removeChild(content);
 
       // Hide unselected sections
       const allSections = content.querySelectorAll('[data-section]');
