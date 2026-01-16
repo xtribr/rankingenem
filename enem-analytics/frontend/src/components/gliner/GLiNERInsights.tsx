@@ -1222,19 +1222,30 @@ function NetworkTab({
 
                   const isHighlighted = hoveredNode === edge.source || hoveredNode === edge.target ||
                                        selectedNode === edge.source || selectedNode === edge.target;
-                  const isInterdisciplinary = (edge as { type?: string }).type === 'interdisciplinary';
+                  const edgeType = (edge as { type?: string }).type;
+                  const isInterdisciplinary = edgeType === 'interdisciplinary';
+                  const isSimilarity = edgeType === 'semantic_similarity';
 
                   // Calculate path for curved connections
                   const midX = (sourcePos.x + targetPos.x) / 2;
                   const midY = (sourcePos.y + targetPos.y) / 2;
-                  // More curve for interdisciplinary edges to make them stand out
-                  const curvature = isInterdisciplinary ? 8 + (idx % 5) : 2 + (idx % 3);
+                  // More curve for special edges to make them stand out
+                  const curvature = isInterdisciplinary ? 8 + (idx % 5) : isSimilarity ? 5 + (idx % 4) : 2 + (idx % 3);
                   const curveX = midX + curvature;
                   const curveY = midY - curvature;
 
-                  // Colors: interdisciplinary = amber/gold, normal = purple
-                  const highlightColor = isInterdisciplinary ? 'rgba(251, 191, 36, 0.9)' : 'rgba(168, 85, 247, 0.8)';
-                  const normalColor = isInterdisciplinary ? 'rgba(251, 191, 36, 0.25)' : 'rgba(148, 163, 184, 0.15)';
+                  // Colors by edge type:
+                  // - interdisciplinary = amber/gold (original data connections)
+                  // - semantic_similarity = cyan/teal (auto-detected similar labels)
+                  // - normal = purple/gray
+                  const colors = {
+                    interdisciplinary: { highlight: 'rgba(251, 191, 36, 0.9)', normal: 'rgba(251, 191, 36, 0.3)' },
+                    semantic_similarity: { highlight: 'rgba(6, 182, 212, 0.9)', normal: 'rgba(6, 182, 212, 0.35)' },
+                    default: { highlight: 'rgba(168, 85, 247, 0.8)', normal: 'rgba(148, 163, 184, 0.15)' }
+                  };
+                  const edgeColors = isInterdisciplinary ? colors.interdisciplinary
+                    : isSimilarity ? colors.semantic_similarity
+                    : colors.default;
 
                   return (
                     <g key={idx}>
@@ -1242,9 +1253,9 @@ function NetworkTab({
                       <path
                         d={`M ${sourcePos.x} ${sourcePos.y} Q ${curveX} ${curveY} ${targetPos.x} ${targetPos.y}`}
                         fill="none"
-                        stroke={isHighlighted ? highlightColor : normalColor}
-                        strokeWidth={isHighlighted ? (isInterdisciplinary ? 0.4 : 0.3) : (isInterdisciplinary ? 0.2 : 0.15)}
-                        strokeDasharray={isInterdisciplinary ? '1.5 0.8' : undefined}
+                        stroke={isHighlighted ? edgeColors.highlight : edgeColors.normal}
+                        strokeWidth={isHighlighted ? 0.4 : (isInterdisciplinary || isSimilarity ? 0.25 : 0.15)}
+                        strokeDasharray={isInterdisciplinary ? '1.5 0.8' : isSimilarity ? '0.8 0.5' : undefined}
                         filter={isHighlighted ? 'url(#glowEnhanced)' : undefined}
                         className="transition-all duration-300"
                       />
@@ -1252,14 +1263,14 @@ function NetworkTab({
                       {/* Flow animation particles */}
                       {animationEnabled && isHighlighted && (
                         <>
-                          <circle r="0.8" fill={isInterdisciplinary ? 'rgba(251, 191, 36, 0.9)' : 'rgba(168, 85, 247, 0.9)'}>
+                          <circle r="0.8" fill={edgeColors.highlight}>
                             <animateMotion
                               dur={`${1.5 + (idx % 3) * 0.5}s`}
                               repeatCount="indefinite"
                               path={`M ${sourcePos.x} ${sourcePos.y} Q ${curveX} ${curveY} ${targetPos.x} ${targetPos.y}`}
                             />
                           </circle>
-                          <circle r="0.5" fill={isInterdisciplinary ? 'rgba(245, 158, 11, 0.7)' : 'rgba(59, 130, 246, 0.7)'}>
+                          <circle r="0.5" fill={isSimilarity ? 'rgba(34, 211, 238, 0.7)' : isInterdisciplinary ? 'rgba(245, 158, 11, 0.7)' : 'rgba(59, 130, 246, 0.7)'}>
                             <animateMotion
                               dur={`${2 + (idx % 2) * 0.5}s`}
                               repeatCount="indefinite"
@@ -1481,43 +1492,106 @@ function NetworkTab({
             </div>
           </div>
 
-          {/* Legend & Controls */}
+          {/* Legend & Audit Info */}
           <div className="px-6 py-4 border-t border-white/10 bg-black/20">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-6">
-                {entityFilters.conceito_cientifico && (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-blue-500 shadow-lg shadow-blue-500/30" />
-                    <span className="text-xs text-slate-400">Conceito Científico</span>
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-4 flex-wrap">
+                {/* Node types */}
+                <div className="flex items-center gap-3">
+                  {entityFilters.conceito_cientifico && (
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-3 rounded-full bg-blue-500" />
+                      <span className="text-[10px] text-slate-400">Conceito</span>
+                    </div>
+                  )}
+                  {entityFilters.campo_semantico && (
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-3 rounded-full bg-purple-500" />
+                      <span className="text-[10px] text-slate-400">Semântico</span>
+                    </div>
+                  )}
+                  {entityFilters.campo_lexical && (
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                      <span className="text-[10px] text-slate-400">Lexical</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Edge types legend */}
+                <div className="flex items-center gap-3 pl-3 border-l border-slate-700">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-6 h-0.5 bg-amber-400" style={{ backgroundImage: 'repeating-linear-gradient(90deg, #fbbf24 0, #fbbf24 4px, transparent 4px, transparent 6px)' }} />
+                    <span className="text-[10px] text-amber-400">Interdisciplinar</span>
                   </div>
-                )}
-                {entityFilters.campo_semantico && (
-                  <div className="flex items-center gap-2">
-                    <div className={`w-5 h-5 rounded-full bg-purple-500 shadow-lg shadow-purple-500/30 ${animationEnabled ? 'animate-pulse' : ''}`} />
-                    <span className="text-xs text-slate-300 font-medium">Campo Semântico</span>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-6 h-0.5 bg-cyan-400" style={{ backgroundImage: 'repeating-linear-gradient(90deg, #22d3ee 0, #22d3ee 2px, transparent 2px, transparent 4px)' }} />
+                    <span className="text-[10px] text-cyan-400">Similaridade</span>
                   </div>
-                )}
-                {entityFilters.campo_lexical && (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/30" />
-                    <span className="text-xs text-slate-400">Campo Lexical</span>
-                  </div>
-                )}
-                {/* Interdisciplinary connection legend */}
-                <div className="flex items-center gap-2 ml-4 pl-4 border-l border-slate-700">
-                  <div className="w-8 h-0.5 bg-amber-400 rounded" style={{ backgroundImage: 'repeating-linear-gradient(90deg, #fbbf24 0, #fbbf24 8px, transparent 8px, transparent 12px)' }} />
-                  <span className="text-xs text-amber-400">Interdisciplinar</span>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                {viewMode === 'clusters' && (
-                  <span className="text-xs text-purple-400 bg-purple-500/20 px-2 py-1 rounded-full">
-                    Modo Clusters por Área
-                  </span>
-                )}
-                <p className="text-xs text-slate-500">Clique para fixar • Hover para conexões</p>
-              </div>
+
+              {/* Audit summary */}
+              {graphData?.similarity_audit && (
+                <div className="flex items-center gap-2 text-[10px]">
+                  {graphData.similarity_audit.exact_duplicates > 0 && (
+                    <span className="px-2 py-0.5 bg-red-500/20 text-red-400 rounded">
+                      {graphData.similarity_audit.exact_duplicates} duplicatas
+                    </span>
+                  )}
+                  {graphData.similarity_audit.total_similarity_edges > 0 && (
+                    <span className="px-2 py-0.5 bg-cyan-500/20 text-cyan-400 rounded">
+                      {graphData.similarity_audit.total_similarity_edges} conexões detectadas
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
+
+            {/* Expanded audit details (show on hover/click) */}
+            {graphData?.similarity_audit && graphData.similarity_audit.exact_duplicates > 0 && (
+              <details className="mt-3 text-xs">
+                <summary className="cursor-pointer text-slate-400 hover:text-slate-300 transition-colors">
+                  Ver relatório de auditoria ({graphData.similarity_audit.exact_duplicates + graphData.similarity_audit.similar_labels} itens)
+                </summary>
+                <div className="mt-2 p-3 bg-slate-800/50 rounded-lg max-h-40 overflow-y-auto">
+                  {graphData.similarity_audit.details.duplicates.length > 0 && (
+                    <div className="mb-2">
+                      <p className="text-red-400 font-medium mb-1">Duplicatas exatas:</p>
+                      <div className="space-y-1">
+                        {graphData.similarity_audit.details.duplicates.slice(0, 5).map((d, i) => (
+                          <div key={i} className="flex items-center gap-2 text-slate-300">
+                            <span className="text-red-400">•</span>
+                            <span>"{d.label1}"</span>
+                            <span className="text-slate-500">↔</span>
+                            <span>"{d.label2}"</span>
+                            <span className="text-slate-500">({d.area1} / {d.area2})</span>
+                            <span className="text-emerald-400">{Math.round(d.similarity * 100)}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {graphData.similarity_audit.details.similar.length > 0 && (
+                    <div>
+                      <p className="text-cyan-400 font-medium mb-1">Labels similares:</p>
+                      <div className="space-y-1">
+                        {graphData.similarity_audit.details.similar.slice(0, 5).map((d, i) => (
+                          <div key={i} className="flex items-center gap-2 text-slate-300">
+                            <span className="text-cyan-400">•</span>
+                            <span>"{d.label1}"</span>
+                            <span className="text-slate-500">↔</span>
+                            <span>"{d.label2}"</span>
+                            <span className="text-slate-500">({d.area1} / {d.area2})</span>
+                            <span className="text-emerald-400">{Math.round(d.similarity * 100)}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </details>
+            )}
           </div>
 
         </div>

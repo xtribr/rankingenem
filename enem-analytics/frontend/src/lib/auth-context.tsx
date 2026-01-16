@@ -7,7 +7,7 @@
  */
 
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
-import { supabase, User, getCurrentUser, signIn, signOut } from './supabase';
+import { supabase, User, getCurrentUser, getUserFromSession, signIn, signOut } from './supabase';
 import type { Session } from '@supabase/supabase-js';
 
 interface AuthContextType {
@@ -28,8 +28,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Refresh user using existing session to avoid re-fetching
+  const refreshUserFromSession = useCallback(async (currentSession: Session | null) => {
+    console.log('[AuthContext] refreshUserFromSession called');
+    if (!currentSession) {
+      console.log('[AuthContext] No session provided');
+      setUser(null);
+      return;
+    }
+    try {
+      const currentUser = await getUserFromSession(currentSession);
+      console.log('[AuthContext] getUserFromSession returned:', currentUser?.email || 'null');
+      setUser(currentUser);
+    } catch (error) {
+      console.error('[AuthContext] Failed to refresh user:', error);
+      setUser(null);
+    }
+  }, []);
+
+  // Legacy refresh - fetches session first (for manual refresh)
   const refreshUser = useCallback(async () => {
-    console.log('[AuthContext] refreshUser called');
+    console.log('[AuthContext] refreshUser called (legacy)');
     try {
       const currentUser = await getCurrentUser();
       console.log('[AuthContext] getCurrentUser returned:', currentUser?.email || 'null');
@@ -42,39 +61,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    let initialLoadDone = false;
 
-    // Get initial session
     console.log('[AuthContext] Initializing...');
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!mounted) return;
-      console.log('[AuthContext] Initial session:', session ? 'exists' : 'none');
-      setSession(session);
-      if (session) {
-        refreshUser().finally(() => {
-          if (mounted) {
-            console.log('[AuthContext] Initial load complete');
-            setIsLoading(false);
-          }
-        });
-      } else {
-        console.log('[AuthContext] No session, loading complete');
-        setIsLoading(false);
-      }
-    });
 
-    // Listen for auth changes
+    // Listen for auth changes - handles BOTH initial load and subsequent changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (event, newSession) => {
         if (!mounted) return;
         console.log('[AuthContext] Auth state changed:', event);
-        setSession(session);
+        setSession(newSession);
 
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          console.log('[AuthContext] Refreshing user after', event);
-          await refreshUser();
-          console.log('[AuthContext] User refreshed, setting isLoading=false');
+        // Handle initial session or sign in
+        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          // Prevent duplicate fetches - only skip if we already loaded a valid user
+          if (event === 'SIGNED_IN' && initialLoadDone && newSession) {
+            console.log('[AuthContext] Skipping duplicate SIGNED_IN');
+            return;
+          }
+
+          console.log('[AuthContext] Loading user for', event);
+          await refreshUserFromSession(newSession);
+          console.log('[AuthContext] User loaded');
+
+          // Only mark as done if we actually had a session
+          if (newSession) {
+            initialLoadDone = true;
+          }
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
+          initialLoadDone = false;
         }
 
         if (mounted) {
@@ -87,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [refreshUser]);
+  }, [refreshUserFromSession]);
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);

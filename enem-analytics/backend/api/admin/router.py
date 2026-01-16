@@ -1,149 +1,189 @@
-"""Admin routes for user management"""
-from typing import List
+"""Admin routes for user management - Supabase version"""
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from pydantic import BaseModel, EmailStr
 
-from database.config import get_db
-from database.models import User
-from api.auth.schemas import UserCreate, UserUpdate, UserResponse
-from api.auth.service import hash_password, get_user_by_email, get_user_by_inep
-from api.auth.dependencies import get_current_admin
+from api.auth.supabase_dependencies import get_current_admin, UserProfile
+from api.auth.supabase_service import get_supabase, list_all_profiles, update_profile
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
 
-@router.get("/users", response_model=List[UserResponse])
+class UserCreate(BaseModel):
+    codigo_inep: str
+    nome_escola: str
+    email: EmailStr
+    password: str
+    is_admin: bool = False
+
+
+class UserUpdate(BaseModel):
+    nome_escola: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_admin: Optional[bool] = None
+    password: Optional[str] = None  # For password changes
+
+
+@router.get("/users")
 async def list_users(
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_admin)
+    _: UserProfile = Depends(get_current_admin)
 ):
     """
     List all registered schools/users.
-
     Requires admin privileges.
     """
-    users = db.query(User).offset(skip).limit(limit).all()
-    return users
+    profiles = list_all_profiles(skip=skip, limit=limit)
+    return [
+        {
+            "id": p.id,
+            "codigo_inep": p.codigo_inep,
+            "nome_escola": p.nome_escola,
+            "is_admin": p.is_admin,
+            "is_active": p.is_active,
+        }
+        for p in profiles
+    ]
 
 
-@router.get("/users/{user_id}", response_model=UserResponse)
+@router.get("/users/{user_id}")
 async def get_user(
-    user_id: int,
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_admin)
+    user_id: str,
+    _: UserProfile = Depends(get_current_admin)
 ):
     """
     Get a specific user by ID.
-
     Requires admin privileges.
     """
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
+    supabase = get_supabase()
+    result = supabase.table("profiles").select("*").eq("id", user_id).single().execute()
+
+    if not result.data:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Usuário não encontrado"
         )
-    return user
+
+    return result.data
 
 
-@router.post("/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/users", status_code=status.HTTP_201_CREATED)
 async def create_user(
     user_data: UserCreate,
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_admin)
+    _: UserProfile = Depends(get_current_admin)
 ):
     """
     Create a new school/user.
-
     Requires admin privileges.
     """
-    # Check if email already exists
-    if get_user_by_email(db, user_data.email):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email já cadastrado"
-        )
+    supabase = get_supabase()
 
     # Check if INEP already exists
-    if get_user_by_inep(db, user_data.codigo_inep):
+    existing = supabase.table("profiles").select("id").eq("codigo_inep", user_data.codigo_inep).execute()
+    if existing.data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Código INEP já cadastrado"
         )
 
-    # Create user
-    user = User(
-        codigo_inep=user_data.codigo_inep,
-        nome_escola=user_data.nome_escola,
-        email=user_data.email,
-        password_hash=hash_password(user_data.password),
-        is_admin=user_data.is_admin
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    # Create user in Supabase Auth
+    try:
+        auth_response = supabase.auth.admin.create_user({
+            "email": user_data.email,
+            "password": user_data.password,
+            "email_confirm": True,
+            "user_metadata": {
+                "codigo_inep": user_data.codigo_inep,
+                "nome_escola": user_data.nome_escola
+            }
+        })
 
-    return user
+        if not auth_response.user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Erro ao criar usuário"
+            )
+
+        user_id = auth_response.user.id
+
+        # Create profile
+        profile_result = supabase.table("profiles").insert({
+            "id": user_id,
+            "codigo_inep": user_data.codigo_inep,
+            "nome_escola": user_data.nome_escola,
+            "is_admin": user_data.is_admin
+        }).execute()
+
+        return profile_result.data[0] if profile_result.data else {"id": user_id}
+
+    except Exception as e:
+        if "already registered" in str(e).lower():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email já cadastrado"
+            )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
 
 
-@router.put("/users/{user_id}", response_model=UserResponse)
-async def update_user(
-    user_id: int,
+@router.put("/users/{user_id}")
+async def update_user_endpoint(
+    user_id: str,
     user_data: UserUpdate,
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_admin)
+    _: UserProfile = Depends(get_current_admin)
 ):
     """
     Update a school/user.
-
     Requires admin privileges.
     """
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
+    supabase = get_supabase()
+
+    # Update password in Supabase Auth if provided
+    if user_data.password:
+        try:
+            supabase.auth.admin.update_user_by_id(
+                user_id,
+                {"password": user_data.password}
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Erro ao atualizar senha: {str(e)}"
+            )
+
+    # Update profile fields
+    updated = update_profile(
+        user_id,
+        nome_escola=user_data.nome_escola,
+        is_active=user_data.is_active,
+        is_admin=user_data.is_admin
+    )
+
+    if not updated:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Usuário não encontrado"
         )
 
-    # Update fields if provided
-    if user_data.nome_escola is not None:
-        user.nome_escola = user_data.nome_escola
-
-    if user_data.email is not None:
-        existing = get_user_by_email(db, user_data.email)
-        if existing and existing.id != user_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email já cadastrado por outro usuário"
-            )
-        user.email = user_data.email
-
-    if user_data.password is not None:
-        user.password_hash = hash_password(user_data.password)
-
-    if user_data.is_active is not None:
-        user.is_active = user_data.is_active
-
-    if user_data.is_admin is not None:
-        user.is_admin = user_data.is_admin
-
-    db.commit()
-    db.refresh(user)
-
-    return user
+    return {
+        "id": updated.id,
+        "codigo_inep": updated.codigo_inep,
+        "nome_escola": updated.nome_escola,
+        "is_admin": updated.is_admin,
+        "is_active": updated.is_active,
+    }
 
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
-    user_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin)
+    user_id: str,
+    current_user: UserProfile = Depends(get_current_admin)
 ):
     """
     Deactivate a school/user (soft delete).
-
     Requires admin privileges.
     """
     if user_id == current_user.id:
@@ -152,32 +192,34 @@ async def delete_user(
             detail="Não é possível desativar seu próprio usuário"
         )
 
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
+    updated = update_profile(user_id, is_active=False)
+
+    if not updated:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Usuário não encontrado"
         )
-
-    user.is_active = False
-    db.commit()
 
     return None
 
 
 @router.get("/stats")
 async def get_admin_stats(
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_admin)
+    _: UserProfile = Depends(get_current_admin)
 ):
     """
     Get admin statistics.
-
     Requires admin privileges.
     """
-    total_users = db.query(User).count()
-    active_users = db.query(User).filter(User.is_active == True).count()
-    admin_users = db.query(User).filter(User.is_admin == True).count()
+    supabase = get_supabase()
+
+    # Get all profiles
+    result = supabase.table("profiles").select("is_active, is_admin").execute()
+    profiles = result.data or []
+
+    total_users = len(profiles)
+    active_users = sum(1 for p in profiles if p.get("is_active", True))
+    admin_users = sum(1 for p in profiles if p.get("is_admin", False))
 
     return {
         "total_users": total_users,

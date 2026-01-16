@@ -12,10 +12,74 @@ Provides rich educational analytics using GLiNER-extracted entities:
 import os
 import sys
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple, Set
 from collections import Counter
+from difflib import SequenceMatcher
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
+
+
+def levenshtein_ratio(s1: str, s2: str) -> float:
+    """Calculate similarity ratio between two strings using SequenceMatcher."""
+    return SequenceMatcher(None, s1.lower(), s2.lower()).ratio()
+
+
+def find_similar_labels(labels: List[Tuple[str, str, str]], threshold: float = 0.7) -> List[Dict]:
+    """
+    Find similar labels that might be duplicates or related concepts.
+
+    Args:
+        labels: List of (node_id, label, area) tuples
+        threshold: Minimum similarity ratio to consider as match
+
+    Returns:
+        List of similarity matches with scores
+    """
+    matches = []
+    n = len(labels)
+
+    for i in range(n):
+        id1, label1, area1 = labels[i]
+        label1_lower = label1.lower().strip()
+
+        for j in range(i + 1, n):
+            id2, label2, area2 = labels[j]
+            label2_lower = label2.lower().strip()
+
+            # Skip if same area (we want cross-area connections)
+            # But still detect duplicates within same area for reporting
+
+            # Calculate similarity
+            ratio = levenshtein_ratio(label1_lower, label2_lower)
+
+            # Also check for prefix/suffix matches
+            is_prefix = label1_lower.startswith(label2_lower[:min(8, len(label2_lower))]) or \
+                       label2_lower.startswith(label1_lower[:min(8, len(label1_lower))])
+
+            # Check for word overlap
+            words1 = set(label1_lower.split())
+            words2 = set(label2_lower.split())
+            word_overlap = len(words1 & words2) / max(len(words1 | words2), 1)
+
+            # Combine scores
+            combined_score = max(ratio, word_overlap * 0.9)
+            if is_prefix and len(label1_lower) > 5 and len(label2_lower) > 5:
+                combined_score = max(combined_score, 0.75)
+
+            if combined_score >= threshold:
+                matches.append({
+                    'node1_id': id1,
+                    'node2_id': id2,
+                    'label1': label1,
+                    'label2': label2,
+                    'area1': area1,
+                    'area2': area2,
+                    'similarity': round(combined_score, 3),
+                    'is_cross_area': area1 != area2,
+                    'match_type': 'exact' if ratio > 0.95 else ('prefix' if is_prefix else 'similar')
+                })
+
+    return sorted(matches, key=lambda x: -x['similarity'])
 
 # Data paths
 DADOS_DIR = Path(__file__).parent.parent.parent / "data"
@@ -500,6 +564,55 @@ async def get_knowledge_graph(
     interdisciplinary_count = len([n for n in nodes if n.get('is_interdisciplinary', False)])
     interdisciplinary_edges = len([e for e in edges if e.get('type') == 'interdisciplinary'])
 
+    # ========================================
+    # SEMANTIC SIMILARITY DETECTION
+    # Find and connect similar labels across different areas
+    # ========================================
+
+    # Build list of all node labels with their areas
+    all_labels = [(n['id'], n['label'], n.get('area', 'unknown')) for n in nodes]
+
+    # Find similar labels (threshold 0.65 for broader matching)
+    similarity_matches = find_similar_labels(all_labels, threshold=0.65)
+
+    # Create edges for cross-area similar labels
+    similarity_edges_added = set()
+    similarity_report = {
+        'exact_duplicates': [],
+        'similar_labels': [],
+        'suggested_connections': []
+    }
+
+    for match in similarity_matches:
+        node1_id = match['node1_id']
+        node2_id = match['node2_id']
+
+        # Categorize the match
+        if match['similarity'] > 0.95:
+            similarity_report['exact_duplicates'].append(match)
+        elif match['similarity'] > 0.75:
+            similarity_report['similar_labels'].append(match)
+        else:
+            similarity_report['suggested_connections'].append(match)
+
+        # Only create edges for cross-area connections
+        if match['is_cross_area']:
+            edge_key = tuple(sorted([node1_id, node2_id]))
+            # Skip if edge already exists
+            if edge_key not in added_interdisciplinary and edge_key not in similarity_edges_added:
+                edges.append({
+                    'source': node1_id,
+                    'target': node2_id,
+                    'weight': match['similarity'],
+                    'type': 'semantic_similarity',
+                    'similarity': match['similarity'],
+                    'match_type': match['match_type']
+                })
+                similarity_edges_added.add(edge_key)
+
+    # Update interdisciplinary count
+    similarity_edge_count = len([e for e in edges if e.get('type') == 'semantic_similarity'])
+
     return {
         'codigo_inep': codigo_inep,
         'area': area,
@@ -513,9 +626,21 @@ async def get_knowledge_graph(
             'lexical_nodes': len([n for n in nodes if n['type'] == 'campo_lexical']),
             'interdisciplinary_nodes': interdisciplinary_count,
             'interdisciplinary_edges': interdisciplinary_edges,
+            'similarity_edges': similarity_edge_count,
             'nodes_by_area': {
                 area_code: len([n for n in nodes if n.get('area') == area_code])
                 for area_code in ['CN', 'CH', 'LC', 'MT']
+            }
+        },
+        'similarity_audit': {
+            'exact_duplicates': len(similarity_report['exact_duplicates']),
+            'similar_labels': len(similarity_report['similar_labels']),
+            'suggested_connections': len(similarity_report['suggested_connections']),
+            'total_similarity_edges': similarity_edge_count,
+            'details': {
+                'duplicates': similarity_report['exact_duplicates'][:20],  # Top 20
+                'similar': similarity_report['similar_labels'][:20],
+                'suggested': similarity_report['suggested_connections'][:20]
             }
         }
     }

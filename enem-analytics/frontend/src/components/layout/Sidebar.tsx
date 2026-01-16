@@ -312,7 +312,7 @@ export default function Sidebar() {
         )}
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 overflow-y-auto">
+        <nav className="flex-1 px-3 py-4">
           <ul className="space-y-1">
             {allMenuItems.map((item, idx) => {
               if (item.type === 'header') {
@@ -374,26 +374,19 @@ export default function Sidebar() {
           </div>
         )}
 
-        {/* Contact Card */}
-        {!collapsed && (
-          <div className="p-4">
-            <div className="bg-gradient-to-br from-sky-400 to-orange-500 rounded-2xl p-4">
-              <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center mb-3 p-1">
-                <Image src="/logo-xtri.png" alt="X-TRI" width={28} height={28} />
-              </div>
-              <h4 className="font-semibold text-white mb-1">X-TRI Pro</h4>
-              <p className="text-xs text-white/80 mb-3">
-                Solicite um estudo da sua ESCOLA em comparação com seus CONCORRENTES.
-              </p>
-              <button
-                onClick={() => setIsContactOpen(true)}
-                className="w-full bg-white text-sky-500 text-sm font-semibold py-2 rounded-lg hover:bg-sky-50 transition-colors"
-              >
-                Entrar em Contato
-              </button>
-            </div>
-          </div>
-        )}
+        {/* Contact Button */}
+        <div className={`px-3 pb-4 ${collapsed ? 'text-center' : ''}`}>
+          <button
+            onClick={() => setIsContactOpen(true)}
+            className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-all ${
+              collapsed ? 'justify-center' : ''
+            }`}
+            title="Fale Conosco"
+          >
+            <Send className="h-5 w-5 flex-shrink-0" />
+            {!collapsed && 'Fale Conosco'}
+          </button>
+        </div>
       </aside>
 
       <ContactModal isOpen={isContactOpen} onClose={() => setIsContactOpen(false)} />

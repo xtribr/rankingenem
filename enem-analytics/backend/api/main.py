@@ -93,6 +93,10 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://escolas.xtri.online",
+        "https://www.xtriescolas.app",
+        "https://xtriescolas.app",
+        "https://www.xtriprovas.app",
+        "https://xtriprovas.app",
         "https://frontend-alpha-ten-weodp2t3hu.vercel.app",
         "http://localhost:3000",
         "http://localhost:3001",
@@ -101,7 +105,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_origin_regex=r"https://frontend-.*\.vercel\.app",
+    allow_origin_regex=r"https://(frontend-.*\.vercel\.app|xtri-provas\.vercel\.app)",
 )
 
 # Include routers

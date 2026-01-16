@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+venv312/
+.venv/
+ENV/
+env/
+.eggs/
+*.egg-info/
+*.egg
+
+# Large model checkpoints (only keep best/final)
+models/gliner2-enem-semantic/checkpoint-*/
+models/gliner2-enem-semantic/logs/
+models/gliner2-enem-semantic-v2/checkpoint-*/
+models/gliner2-enem-semantic-v2/logs/
+
+# Local caches and unnecessary data files
+data/gliner_cache*.json
+data/microdados_censo_2024.zip
+data/microdados_censo_escolar_2024/
+data/training/
+data/supabase_loader.py
+
+# Tests
+tests/
+*.test.py
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Scripts not needed in prod
+scripts/
+
+# Local env
+.env
+.env.*
+!.env.example
