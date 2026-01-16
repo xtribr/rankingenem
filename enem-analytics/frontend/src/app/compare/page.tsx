@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Search, GitCompare, FileDown } from 'lucide-react';
@@ -26,7 +26,6 @@ export default function ComparePage() {
   const [school1Name, setSchool1Name] = useState('');
   const [school2Name, setSchool2Name] = useState('');
   const [showPdfModal, setShowPdfModal] = useState(false);
-  const contentRef = useRef<HTMLDivElement>(null);
 
   // Search queries - start with 1 char, show 10 results
   const { data: results1, isLoading: searching1 } = useQuery({
@@ -285,7 +284,7 @@ export default function ComparePage() {
 
       {/* Comparison Results */}
       {comparison && diagnosisComparison && !isLoading && (
-        <div ref={contentRef} className="space-y-6">
+        <div className="space-y-6">
           {/* Summary Cards */}
           <div data-section="summary">
             <SummaryCards
@@ -424,7 +423,19 @@ export default function ComparePage() {
         onClose={() => setShowPdfModal(false)}
         school1Name={school1Name}
         school2Name={school2Name}
-        contentRef={contentRef}
+        school1Code={school1 || ''}
+        school2Code={school2 || ''}
+        school1Data={{
+          nota_media: getLatestScore(history1),
+          ranking: getLatestRanking(history1),
+          uf: comparison?.escola1?.uf || undefined,
+        }}
+        school2Data={{
+          nota_media: getLatestScore(history2),
+          ranking: getLatestRanking(history2),
+          uf: comparison?.escola2?.uf || undefined,
+        }}
+        diagnosisComparison={diagnosisComparison}
       />
     </div>
   );

@@ -1,20 +1,28 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import { X, FileDown, Loader2, Check } from 'lucide-react';
+import { useState } from 'react';
+import { X, FileDown, Loader2, Check, FileText } from 'lucide-react';
+import { generateExecutiveReport, ReportData } from './ExecutiveReportGenerator';
+import { DiagnosisComparisonResult } from '@/lib/api';
 
 interface PDFExportModalProps {
   isOpen: boolean;
   onClose: () => void;
   school1Name: string;
   school2Name: string;
-  contentRef: React.RefObject<HTMLDivElement | null>;
-}
-
-interface ExportSection {
-  id: string;
-  label: string;
-  checked: boolean;
+  school1Code: string;
+  school2Code: string;
+  school1Data?: {
+    nota_media: number | null;
+    ranking: number | null;
+    uf?: string;
+  };
+  school2Data?: {
+    nota_media: number | null;
+    ranking: number | null;
+    uf?: string;
+  };
+  diagnosisComparison?: DiagnosisComparisonResult;
 }
 
 export default function PDFExportModal({
@@ -22,240 +30,44 @@ export default function PDFExportModal({
   onClose,
   school1Name,
   school2Name,
-  contentRef,
+  school1Code,
+  school2Code,
+  school1Data,
+  school2Data,
+  diagnosisComparison,
 }: PDFExportModalProps) {
-  const [sections, setSections] = useState<ExportSection[]>([
-    { id: 'summary', label: 'Resumo Geral (cards de placar)', checked: true },
-    { id: 'radar', label: 'Gráfico Radar (comparação por área)', checked: true },
-    { id: 'bars', label: 'Gráfico de Barras por Área', checked: true },
-    { id: 'evolution', label: 'Evolução Histórica (2018-2024)', checked: true },
-    { id: 'competitive', label: 'Análise de Pontos Fortes/Fracos', checked: true },
-    { id: 'tri-analysis', label: 'Análise TRI (proficiência)', checked: true },
-    { id: 'quickwins', label: 'Quick Wins (oportunidades)', checked: true },
-    { id: 'success-stories', label: 'Casos de Sucesso', checked: true },
-    { id: 'rankings', label: 'Rankings e Posição Relativa', checked: true },
-  ]);
-  const [includeWatermark, setIncludeWatermark] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
 
-  const toggleSection = (id: string) => {
-    setSections(prev =>
-      prev.map(s => (s.id === id ? { ...s, checked: !s.checked } : s))
-    );
-  };
-
-  // Force all colors to RGB format for html2canvas compatibility (Tailwind v4 uses lab/oklch)
-  const forceRGBColors = (element: HTMLElement) => {
-    const colorProps = [
-      'color', 'background-color', 'border-color',
-      'border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color',
-      'outline-color', 'text-decoration-color', 'fill', 'stroke', 'box-shadow'
-    ];
-
-    // Create a shared canvas for color conversion
-    const canvas = document.createElement('canvas');
-    canvas.width = 1;
-    canvas.height = 1;
-    const ctx = canvas.getContext('2d');
-
-    const convertToRGB = (color: string): string => {
-      if (!color || color === 'none' || color === 'transparent' ||
-          color === 'inherit' || color === 'initial' || color === 'currentcolor') {
-        return color;
-      }
-      // If already rgb/hex, return as is
-      if (color.startsWith('rgb') || color.startsWith('#')) {
-        return color;
-      }
-      // Use canvas to convert any color format to hex
-      if (ctx) {
-        ctx.fillStyle = '#000000'; // Reset
-        ctx.fillStyle = color;
-        return ctx.fillStyle; // Returns #hex format
-      }
-      return color;
-    };
-
-    const processElement = (el: HTMLElement) => {
-      const computed = getComputedStyle(el);
-
-      // Apply all color properties as inline styles with RGB values
-      colorProps.forEach(prop => {
-        const value = computed.getPropertyValue(prop);
-        if (value && value !== 'none' && value !== 'transparent') {
-          const converted = convertToRGB(value);
-          if (converted !== value) {
-            el.style.setProperty(prop, converted, 'important');
-          } else if (value.startsWith('rgb') || value.startsWith('#')) {
-            el.style.setProperty(prop, value, 'important');
-          }
-        }
-      });
-
-      // Also set background explicitly to avoid inheritance issues
-      const bgColor = computed.backgroundColor;
-      if (bgColor && bgColor !== 'transparent' && bgColor !== 'rgba(0, 0, 0, 0)') {
-        el.style.setProperty('background-color', convertToRGB(bgColor), 'important');
-      }
-
-      // Process children
-      Array.from(el.children).forEach(child => {
-        if (child instanceof HTMLElement) {
-          processElement(child);
-        }
-      });
-    };
-
-    processElement(element);
-  };
-
   const handleExport = async () => {
-    if (!contentRef.current) return;
+    if (!diagnosisComparison) {
+      alert('Dados de comparação não disponíveis. Aguarde o carregamento.');
+      return;
+    }
 
     setIsExporting(true);
     setExportSuccess(false);
 
     try {
-      // Dynamic import of html2pdf
-      const html2pdf = (await import('html2pdf.js')).default;
-
-      // Get selected section IDs
-      const selectedIds = sections.filter(s => s.checked).map(s => s.id);
-
-      // Create a wrapper with forced sRGB colors via CSS override
-      const wrapper = document.createElement('div');
-      wrapper.id = 'pdf-export-wrapper';
-
-      // Inject CSS that overrides Tailwind's lab() colors with fallback sRGB values
-      const styleOverride = document.createElement('style');
-      styleOverride.textContent = `
-        #pdf-export-wrapper, #pdf-export-wrapper * {
-          color-scheme: light !important;
-          forced-color-adjust: none !important;
-        }
-        #pdf-export-wrapper {
-          --color-blue-50: #eff6ff !important;
-          --color-blue-100: #dbeafe !important;
-          --color-blue-200: #bfdbfe !important;
-          --color-blue-500: #3b82f6 !important;
-          --color-blue-600: #2563eb !important;
-          --color-blue-700: #1d4ed8 !important;
-          --color-green-50: #f0fdf4 !important;
-          --color-green-100: #dcfce7 !important;
-          --color-green-200: #bbf7d0 !important;
-          --color-green-500: #22c55e !important;
-          --color-green-600: #16a34a !important;
-          --color-green-700: #15803d !important;
-          --color-red-50: #fef2f2 !important;
-          --color-red-500: #ef4444 !important;
-          --color-red-600: #dc2626 !important;
-          --color-amber-50: #fffbeb !important;
-          --color-amber-500: #f59e0b !important;
-          --color-amber-600: #d97706 !important;
-          --color-purple-50: #faf5ff !important;
-          --color-purple-500: #a855f7 !important;
-          --color-purple-600: #9333ea !important;
-          --color-pink-50: #fdf2f8 !important;
-          --color-pink-500: #ec4899 !important;
-          --color-pink-600: #db2777 !important;
-          --color-gray-50: #f9fafb !important;
-          --color-gray-100: #f3f4f6 !important;
-          --color-gray-200: #e5e7eb !important;
-          --color-gray-300: #d1d5db !important;
-          --color-gray-400: #9ca3af !important;
-          --color-gray-500: #6b7280 !important;
-          --color-gray-600: #4b5563 !important;
-          --color-gray-700: #374151 !important;
-          --color-gray-800: #1f2937 !important;
-          --color-gray-900: #111827 !important;
-        }
-      `;
-      wrapper.appendChild(styleOverride);
-
-      // Clone the content
-      const content = contentRef.current.cloneNode(true) as HTMLElement;
-      wrapper.appendChild(content);
-
-      // Add wrapper to DOM for style computation
-      document.body.appendChild(wrapper);
-      wrapper.style.position = 'absolute';
-      wrapper.style.left = '-9999px';
-      wrapper.style.width = contentRef.current.offsetWidth + 'px';
-      wrapper.style.backgroundColor = '#ffffff';
-
-      // Force RGB colors on all elements
-      forceRGBColors(content);
-
-      // Hide unselected sections
-      const allSections = content.querySelectorAll('[data-section]');
-      allSections.forEach(section => {
-        const sectionId = section.getAttribute('data-section');
-        if (sectionId && !selectedIds.includes(sectionId)) {
-          (section as HTMLElement).style.display = 'none';
-        }
+      // Generate executive report using jsPDF directly
+      generateExecutiveReport({
+        school1: {
+          codigo_inep: school1Code,
+          nome_escola: school1Name,
+          nota_media: school1Data?.nota_media || null,
+          ranking: school1Data?.ranking || null,
+          uf: school1Data?.uf,
+        },
+        school2: {
+          codigo_inep: school2Code,
+          nome_escola: school2Name,
+          nota_media: school2Data?.nota_media || null,
+          ranking: school2Data?.ranking || null,
+          uf: school2Data?.uf,
+        },
+        diagnosisComparison,
+        generatedAt: new Date(),
       });
-
-      // Add header
-      const header = document.createElement('div');
-      header.innerHTML = `
-        <div style="text-align: center; padding: 20px 0; border-bottom: 2px solid #e5e7eb; margin-bottom: 20px;">
-          <h1 style="font-size: 24px; font-weight: bold; color: #1f2937; margin: 0;">X-TRI Escolas</h1>
-          <p style="font-size: 14px; color: #6b7280; margin: 8px 0 0 0;">Relatório Comparativo de Escolas</p>
-          <p style="font-size: 12px; color: #9ca3af; margin: 4px 0 0 0;">Gerado em: ${new Date().toLocaleDateString('pt-BR')}</p>
-        </div>
-        <div style="text-align: center; margin-bottom: 24px;">
-          <p style="font-size: 16px; color: #374151;">
-            <strong style="color: #3b82f6;">${school1Name}</strong>
-            <span style="margin: 0 12px; color: #9ca3af;">vs</span>
-            <strong style="color: #22c55e;">${school2Name}</strong>
-          </p>
-        </div>
-      `;
-      content.insertBefore(header, content.firstChild);
-
-      // Add footer/watermark
-      if (includeWatermark) {
-        const footer = document.createElement('div');
-        footer.innerHTML = `
-          <div style="text-align: center; padding: 20px 0; border-top: 1px solid #e5e7eb; margin-top: 20px;">
-            <p style="font-size: 11px; color: #9ca3af;">
-              Gerado por X-TRI Analytics • www.xtriescolas.app
-            </p>
-          </div>
-        `;
-        content.appendChild(footer);
-      }
-
-      // Configure pdf options
-      const opt = {
-        margin: [10, 10, 10, 10] as [number, number, number, number],
-        filename: `comparativo_${school1Name.slice(0, 15).replace(/\s/g, '_')}_vs_${school2Name.slice(0, 15).replace(/\s/g, '_')}.pdf`,
-        image: { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          // Ignore external stylesheets to avoid lab() color parsing issues
-          ignoreElements: (element: Element) => {
-            return element.tagName === 'LINK' && element.getAttribute('rel') === 'stylesheet';
-          },
-        },
-        jsPDF: {
-          unit: 'mm' as const,
-          format: 'a4' as const,
-          orientation: 'portrait' as const,
-        },
-        pagebreak: { mode: 'avoid-all' as const },
-      };
-
-      // Generate PDF from wrapper (which contains the style overrides)
-      await html2pdf().set(opt).from(wrapper).save();
-
-      // Cleanup: remove wrapper from DOM
-      if (wrapper.parentNode) {
-        wrapper.parentNode.removeChild(wrapper);
-      }
 
       setExportSuccess(true);
       setTimeout(() => {
@@ -264,11 +76,6 @@ export default function PDFExportModal({
       }, 1500);
     } catch (error) {
       console.error('Error exporting PDF:', error);
-      // Cleanup on error
-      const orphanedWrapper = document.getElementById('pdf-export-wrapper');
-      if (orphanedWrapper?.parentNode) {
-        orphanedWrapper.parentNode.removeChild(orphanedWrapper);
-      }
       alert('Erro ao exportar PDF. Tente novamente.');
     } finally {
       setIsExporting(false);
@@ -279,12 +86,12 @@ export default function PDFExportModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center gap-2">
             <FileDown className="h-5 w-5 text-purple-600" />
-            <h2 className="font-semibold text-gray-900">Exportar Relatório PDF</h2>
+            <h2 className="font-semibold text-gray-900">Exportar Relatório</h2>
           </div>
           <button
             onClick={onClose}
@@ -295,45 +102,43 @@ export default function PDFExportModal({
         </div>
 
         {/* Content */}
-        <div className="p-4">
-          <p className="text-sm text-gray-600 mb-4">
-            Selecione as seções a incluir no relatório:
-          </p>
+        <div className="p-6">
+          {/* Preview */}
+          <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl p-6 mb-6 border border-purple-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center">
+                <FileText className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h3 className="font-bold text-purple-900">Relatório Executivo</h3>
+                <p className="text-sm text-purple-600">PDF formatado com marca X-TRI</p>
+              </div>
+            </div>
 
-          {/* Sections checkboxes */}
-          <div className="space-y-2 mb-6">
-            {sections.map(section => (
-              <label
-                key={section.id}
-                className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  checked={section.checked}
-                  onChange={() => toggleSection(section.id)}
-                  className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
-                />
-                <span className="text-sm text-gray-700">{section.label}</span>
-              </label>
-            ))}
+            <div className="space-y-2 text-sm text-gray-600">
+              <p>📊 Resumo executivo da comparação</p>
+              <p>📈 Tabela de desempenho por área</p>
+              <p>💪 Análise de pontos fortes e fracos</p>
+              <p>🎯 Recomendações estratégicas</p>
+            </div>
           </div>
 
-          {/* Watermark option */}
-          <div className="border-t border-gray-200 pt-4">
-            <label className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer">
-              <input
-                type="checkbox"
-                checked={includeWatermark}
-                onChange={(e) => setIncludeWatermark(e.target.checked)}
-                className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
-              />
-              <span className="text-sm text-gray-700">Incluir marca d&apos;água X-TRI</span>
-            </label>
+          {/* Schools info */}
+          <div className="flex items-center justify-center gap-4 mb-6">
+            <div className="text-center">
+              <p className="text-xs text-gray-500 mb-1">Escola 1</p>
+              <p className="font-medium text-blue-600 text-sm">{school1Name.slice(0, 20)}</p>
+            </div>
+            <span className="text-gray-400">vs</span>
+            <div className="text-center">
+              <p className="text-xs text-gray-500 mb-1">Escola 2</p>
+              <p className="font-medium text-green-600 text-sm">{school2Name.slice(0, 20)}</p>
+            </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50">
+        <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
           <button
             onClick={onClose}
             disabled={isExporting}
@@ -343,8 +148,8 @@ export default function PDFExportModal({
           </button>
           <button
             onClick={handleExport}
-            disabled={isExporting || sections.filter(s => s.checked).length === 0}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 ${
+            disabled={isExporting || !diagnosisComparison}
+            className={`flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 ${
               exportSuccess
                 ? 'bg-green-600'
                 : 'bg-purple-600 hover:bg-purple-700'
@@ -358,12 +163,12 @@ export default function PDFExportModal({
             ) : exportSuccess ? (
               <>
                 <Check className="h-4 w-4" />
-                Exportado!
+                Baixado!
               </>
             ) : (
               <>
                 <FileDown className="h-4 w-4" />
-                Gerar Relatório
+                Gerar PDF
               </>
             )}
           </button>
