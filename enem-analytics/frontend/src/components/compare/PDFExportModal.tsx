@@ -45,40 +45,35 @@ export default function PDFExportModal({
     );
   };
 
-  // Convert modern CSS colors (lab, oklch) to rgb for html2canvas compatibility
-  const convertModernColors = (element: HTMLElement) => {
-    const convertColor = (color: string): string => {
-      if (!color || color === 'transparent' || color === 'inherit' || color === 'initial') {
-        return color;
-      }
-      // Check if it's a modern color function that needs conversion
-      if (color.includes('lab(') || color.includes('oklch(') || color.includes('oklab(')) {
-        // Create a temporary element to get computed rgb value
-        const temp = document.createElement('div');
-        temp.style.color = color;
-        temp.style.display = 'none';
-        document.body.appendChild(temp);
-        const computed = getComputedStyle(temp).color;
-        document.body.removeChild(temp);
-        return computed || color;
-      }
-      return color;
-    };
+  // Force all colors to RGB format for html2canvas compatibility (Tailwind v4 uses lab/oklch)
+  const forceRGBColors = (element: HTMLElement) => {
+    const colorProps = [
+      'color', 'background-color', 'border-color',
+      'border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color',
+      'outline-color', 'text-decoration-color', 'fill', 'stroke'
+    ];
 
     const processElement = (el: HTMLElement) => {
       const computed = getComputedStyle(el);
-      const colorProps = [
-        'color', 'backgroundColor', 'borderColor',
-        'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor',
-        'outlineColor', 'textDecorationColor', 'caretColor'
-      ];
 
       colorProps.forEach(prop => {
-        const cssProp = prop.replace(/([A-Z])/g, '-$1').toLowerCase();
-        const value = computed.getPropertyValue(cssProp);
-        if (value && (value.includes('lab(') || value.includes('oklch(') || value.includes('oklab('))) {
-          const converted = convertColor(value);
-          el.style.setProperty(cssProp, converted);
+        const value = computed.getPropertyValue(prop);
+        if (value && value !== 'none' && value !== 'transparent' &&
+            value !== 'inherit' && value !== 'initial' && value !== 'currentcolor') {
+          // Force browser to convert any color format to rgb by reading computed style
+          // and applying it as inline style
+          if (value.startsWith('rgb') || value.startsWith('#')) {
+            el.style.setProperty(prop, value);
+          } else {
+            // For lab/oklch colors, use canvas to convert to RGB
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.fillStyle = value;
+              const rgbValue = ctx.fillStyle; // Canvas always returns #hex or rgb()
+              el.style.setProperty(prop, rgbValue);
+            }
+          }
         }
       });
 
@@ -109,12 +104,12 @@ export default function PDFExportModal({
       // Clone the content
       const content = contentRef.current.cloneNode(true) as HTMLElement;
 
-      // Convert modern CSS colors (lab, oklch) to rgb for html2canvas
+      // Force all colors to RGB format for html2canvas (Tailwind v4 uses lab/oklch)
       document.body.appendChild(content);
       content.style.position = 'absolute';
       content.style.left = '-9999px';
-      convertModernColors(content);
-      document.body.removeChild(content);
+      content.style.width = contentRef.current.offsetWidth + 'px';
+      forceRGBColors(content);
 
       // Hide unselected sections
       const allSections = content.querySelectorAll('[data-section]');
@@ -177,6 +172,11 @@ export default function PDFExportModal({
       // Generate PDF
       await html2pdf().set(opt).from(content).save();
 
+      // Cleanup: remove cloned content from DOM
+      if (content.parentNode) {
+        content.parentNode.removeChild(content);
+      }
+
       setExportSuccess(true);
       setTimeout(() => {
         setExportSuccess(false);
@@ -184,6 +184,11 @@ export default function PDFExportModal({
       }, 1500);
     } catch (error) {
       console.error('Error exporting PDF:', error);
+      // Cleanup on error
+      const orphanedContent = document.querySelector('[style*="-9999px"]');
+      if (orphanedContent?.parentNode) {
+        orphanedContent.parentNode.removeChild(orphanedContent);
+      }
       alert('Erro ao exportar PDF. Tente novamente.');
     } finally {
       setIsExporting(false);
