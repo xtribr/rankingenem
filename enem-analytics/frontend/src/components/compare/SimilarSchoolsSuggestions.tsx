@@ -27,29 +27,30 @@ export default function SimilarSchoolsSuggestions({
     enabled: !!schoolCode,
   });
 
-  // Extract school's UF and current ranking
+  // Extract school's UF and current ranking from the most recent year with data
   const schoolUF = schoolInfo?.uf;
   const latestHistory = schoolInfo?.history?.[schoolInfo.history.length - 1];
+  const latestYear = latestHistory?.ano || 2024;
   const schoolRanking = latestHistory?.ranking_brasil;
 
   // Fetch top schools from same region (for competitors - need enough to filter those above)
   const { data: regionalTopData, isLoading: loadingRegionalTop } = useQuery({
-    queryKey: ['regional-top-schools', schoolUF, 2024],
-    queryFn: () => api.getTopSchools(50, 2024, schoolUF || undefined),
+    queryKey: ['regional-top-schools', schoolUF, latestYear],
+    queryFn: () => api.getTopSchools(50, latestYear, schoolUF || undefined),
     enabled: !!schoolCode && !!schoolUF,
   });
 
   // Fetch top 2 schools from same region (for success stories / benchmarks)
   const { data: regionalBenchmarks, isLoading: loadingBenchmarks } = useQuery({
-    queryKey: ['regional-benchmarks', schoolUF, 2024],
-    queryFn: () => api.getTopSchools(2, 2024, schoolUF || undefined),
+    queryKey: ['regional-benchmarks', schoolUF, latestYear],
+    queryFn: () => api.getTopSchools(2, latestYear, schoolUF || undefined),
     enabled: !!schoolCode && !!schoolUF,
   });
 
   // Fetch national top schools for benchmarks tab
   const { data: nationalTopData, isLoading: loadingNationalTop } = useQuery({
-    queryKey: ['national-top-schools', 2024],
-    queryFn: () => api.getTopSchools(5, 2024),
+    queryKey: ['national-top-schools', latestYear],
+    queryFn: () => api.getTopSchools(5, latestYear),
     enabled: !!schoolCode,
   });
 
