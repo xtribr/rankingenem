@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api, SimilarSchool, TopSchool } from '@/lib/api';
-import { Trophy, Target, TrendingUp, ChevronRight, Search } from 'lucide-react';
+import { api, TopSchool } from '@/lib/api';
+import { Trophy, Target, TrendingUp, ChevronRight, Search, MapPin } from 'lucide-react';
 
 interface SimilarSchoolsSuggestionsProps {
   schoolCode: string;
@@ -18,44 +18,71 @@ export default function SimilarSchoolsSuggestions({
   schoolName,
   onSelectSchool,
 }: SimilarSchoolsSuggestionsProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('benchmarks');
+  const [activeTab, setActiveTab] = useState<TabType>('competitors');
 
-  // Fetch similar schools
-  const { data: similarData, isLoading: loadingSimilar } = useQuery({
-    queryKey: ['similar', schoolCode],
-    queryFn: () => api.getSimilarSchools(schoolCode, 10, true),
+  // Fetch school info to get UF and ranking
+  const { data: schoolInfo, isLoading: loadingSchoolInfo } = useQuery({
+    queryKey: ['school-history', schoolCode],
+    queryFn: () => api.getSchoolHistory(schoolCode),
     enabled: !!schoolCode,
   });
 
-  // Fetch improved similar schools
-  const { data: improvedData, isLoading: loadingImproved } = useQuery({
-    queryKey: ['similar-improved', schoolCode],
-    queryFn: () => api.getSimilarImprovedSchools(schoolCode, 5, 30),
+  // Extract school's UF and current ranking
+  const schoolUF = schoolInfo?.uf;
+  const latestHistory = schoolInfo?.history?.[schoolInfo.history.length - 1];
+  const schoolRanking = latestHistory?.ranking_brasil;
+
+  // Fetch top schools from same region (for competitors - need enough to filter those above)
+  const { data: regionalTopData, isLoading: loadingRegionalTop } = useQuery({
+    queryKey: ['regional-top-schools', schoolUF, 2024],
+    queryFn: () => api.getTopSchools(50, 2024, schoolUF || undefined),
+    enabled: !!schoolCode && !!schoolUF,
+  });
+
+  // Fetch top 2 schools from same region (for success stories / benchmarks)
+  const { data: regionalBenchmarks, isLoading: loadingBenchmarks } = useQuery({
+    queryKey: ['regional-benchmarks', schoolUF, 2024],
+    queryFn: () => api.getTopSchools(2, 2024, schoolUF || undefined),
+    enabled: !!schoolCode && !!schoolUF,
+  });
+
+  // Fetch national top schools for benchmarks tab
+  const { data: nationalTopData, isLoading: loadingNationalTop } = useQuery({
+    queryKey: ['national-top-schools', 2024],
+    queryFn: () => api.getTopSchools(5, 2024),
     enabled: !!schoolCode,
   });
 
-  // Fetch top schools for benchmarks
-  const { data: topData, isLoading: loadingTop } = useQuery({
-    queryKey: ['top-schools', 2024],
-    queryFn: () => api.getTopSchools(10, 2024),
-    enabled: !!schoolCode,
-  });
+  const isLoading = loadingSchoolInfo || loadingRegionalTop || loadingBenchmarks || loadingNationalTop;
 
-  const isLoading = loadingSimilar || loadingImproved || loadingTop;
+  // Filter competitors: schools from same region ranked above the selected school
+  const competitors = useMemo(() => {
+    if (!regionalTopData?.schools || !schoolRanking) return [];
 
-  // Filter similar schools as competitors (close in ranking)
-  const competitors = similarData?.similar_schools?.slice(0, 5) || [];
+    return regionalTopData.schools
+      .filter((school: TopSchool) =>
+        school.codigo_inep !== schoolCode &&
+        school.ranking !== null &&
+        school.ranking < schoolRanking
+      )
+      .slice(0, 5);
+  }, [regionalTopData, schoolRanking, schoolCode]);
 
-  // Top schools as benchmarks
-  const benchmarks = topData?.schools?.slice(0, 5) || [];
+  // Top 2 schools from same region as success stories/reference
+  const regionalSuccessStories = useMemo(() => {
+    if (!regionalBenchmarks?.schools) return [];
+    return regionalBenchmarks.schools
+      .filter((school: TopSchool) => school.codigo_inep !== schoolCode)
+      .slice(0, 2);
+  }, [regionalBenchmarks, schoolCode]);
 
-  // Success stories
-  const successStories = improvedData?.improved_similar_schools || [];
+  // National benchmarks
+  const benchmarks = nationalTopData?.schools?.slice(0, 5) || [];
 
   const tabs = [
-    { id: 'benchmarks' as TabType, label: 'Benchmarks', icon: Trophy, count: benchmarks.length },
     { id: 'competitors' as TabType, label: 'Concorrentes', icon: Target, count: competitors.length },
-    { id: 'success' as TabType, label: 'Casos de Sucesso', icon: TrendingUp, count: successStories.length },
+    { id: 'success' as TabType, label: 'Referência Regional', icon: TrendingUp, count: regionalSuccessStories.length },
+    { id: 'benchmarks' as TabType, label: 'Top Nacional', icon: Trophy, count: benchmarks.length },
   ];
 
   const renderSchoolItem = (
@@ -85,6 +112,13 @@ export default function SimilarSchoolsSuggestions({
         </div>
         <p className="text-sm text-gray-500">
           Baseado no perfil de <strong className="text-gray-700">{schoolName.slice(0, 30)}</strong>
+          {schoolUF && (
+            <span className="inline-flex items-center gap-1 ml-2">
+              <MapPin className="h-3 w-3" />
+              <span className="text-purple-600 font-medium">{schoolUF}</span>
+              {schoolRanking && <span className="text-gray-400">• #{schoolRanking} Brasil</span>}
+            </span>
+          )}
         </p>
       </div>
 
@@ -157,52 +191,57 @@ export default function SimilarSchoolsSuggestions({
                 {competitors.length > 0 ? (
                   <div>
                     <p className="px-4 py-2 text-xs text-gray-500 bg-gray-50">
-                      🎯 Escolas similares ao seu perfil (mesmo cluster)
+                      🎯 Escolas do {schoolUF} com ranking acima da sua escola
                     </p>
-                    {competitors.map((school: SimilarSchool) =>
+                    {competitors.map((school: TopSchool) =>
                       renderSchoolItem(
                         school.codigo_inep,
                         school.nome_escola,
                         <p className="text-sm text-gray-500">
-                          {school.tipo_escola} • Porte {school.porte}
+                          #{school.ranking} Brasil • {school.nota_media?.toFixed(0)} pts
                         </p>
                       )
                     )}
                   </div>
+                ) : schoolRanking && schoolRanking <= 5 ? (
+                  <div className="p-4 text-center">
+                    <p className="text-sm text-green-600 font-medium">🎉 Parabéns!</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Sua escola está entre as melhores do {schoolUF}!
+                    </p>
+                  </div>
                 ) : (
                   <p className="p-4 text-sm text-gray-500 text-center">
-                    Nenhum concorrente encontrado
+                    {!schoolUF ? 'Carregando informações da escola...' : 'Nenhum concorrente encontrado'}
                   </p>
                 )}
               </>
             )}
 
-            {/* Success Stories Tab */}
+            {/* Success Stories Tab - Top 2 from same region */}
             {activeTab === 'success' && (
               <>
-                {successStories.length > 0 ? (
+                {regionalSuccessStories.length > 0 ? (
                   <div>
                     <p className="px-4 py-2 text-xs text-gray-500 bg-gray-50">
-                      📈 Escolas similares que melhoraram significativamente
+                      🏆 Melhores escolas do {schoolUF} para usar como referência
                     </p>
-                    {successStories.map((school) =>
+                    {regionalSuccessStories.map((school: TopSchool) =>
                       renderSchoolItem(
                         school.codigo_inep,
                         school.nome_escola,
-                        <p className="text-sm text-green-600 font-medium">
-                          +{school.improvement?.toFixed(0)} pts de melhoria
+                        <p className="text-sm text-purple-600 font-medium">
+                          #{school.ranking} Brasil • {school.nota_media?.toFixed(0)} pts
                         </p>
                       )
                     )}
-                    {improvedData?.insight && (
-                      <p className="px-4 py-3 text-xs text-amber-700 bg-amber-50 border-t border-amber-100">
-                        💡 {improvedData.insight}
-                      </p>
-                    )}
+                    <p className="px-4 py-3 text-xs text-purple-700 bg-purple-50 border-t border-purple-100">
+                      💡 Compare com as líderes regionais para identificar oportunidades de melhoria
+                    </p>
                   </div>
                 ) : (
                   <p className="p-4 text-sm text-gray-500 text-center">
-                    Nenhum caso de sucesso encontrado
+                    {!schoolUF ? 'Carregando informações da escola...' : 'Nenhuma referência regional encontrada'}
                   </p>
                 )}
               </>

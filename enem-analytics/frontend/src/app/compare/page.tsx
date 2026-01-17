@@ -15,7 +15,8 @@ import {
   ChevronDown,
   Sparkles,
   Award,
-  GraduationCap
+  GraduationCap,
+  AlertCircle
 } from 'lucide-react';
 import {
   SummaryCards,
@@ -102,13 +103,13 @@ export default function ComparePage() {
   });
 
   // Comparison data
-  const { data: comparison, isLoading: comparing } = useQuery({
+  const { data: comparison, isLoading: comparing, isError: compareError, error: compareErrorMsg } = useQuery({
     queryKey: ['compare', school1, school2],
     queryFn: () => api.compareSchools(school1!, school2!),
     enabled: !!school1 && !!school2,
   });
 
-  const { data: diagnosisComparison, isLoading: loadingDiagnosis } = useQuery({
+  const { data: diagnosisComparison, isLoading: loadingDiagnosis, isError: diagnosisError, error: diagnosisErrorMsg } = useQuery({
     queryKey: ['diagnosis-compare', school1, school2],
     queryFn: () => api.compareDiagnosis(school1!, school2!),
     enabled: !!school1 && !!school2,
@@ -327,9 +328,30 @@ export default function ComparePage() {
           </div>
         )}
 
-        {/* Comparison Results */}
-        {comparison && diagnosisComparison && !isLoading && (
+        {/* Error State */}
+        {(compareError || diagnosisError) && !isLoading && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
+            <AlertCircle className="w-10 h-10 text-red-400 mx-auto mb-3" />
+            <p className="text-red-700 font-medium">Erro ao carregar comparação</p>
+            <p className="text-red-500 text-sm mt-1">
+              {(compareErrorMsg as Error)?.message || (diagnosisErrorMsg as Error)?.message || 'Verifique se ambas as escolas possuem dados disponíveis'}
+            </p>
+          </div>
+        )}
+
+        {/* Comparison Results - Show when at least comparison succeeds */}
+        {comparison && !isLoading && !compareError && (
           <div className="space-y-6">
+
+            {/* Warning when diagnosis data failed but comparison succeeded */}
+            {diagnosisError && !diagnosisComparison && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+                <p className="text-amber-700 text-sm">
+                  Algumas análises avançadas não estão disponíveis para estas escolas. Exibindo dados básicos de comparação.
+                </p>
+              </div>
+            )}
 
             {/* KPI Cards Row */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -529,7 +551,8 @@ export default function ComparePage() {
               </div>
             </div>
 
-            {/* Second Row - Performance by Area & Bar Chart */}
+            {/* Second Row - Performance by Area & Bar Chart (requires diagnosis data) */}
+            {diagnosisComparison && areaData.length > 0 && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
               {/* Performance by Area - Progress Bars */}
@@ -610,6 +633,7 @@ export default function ComparePage() {
                 </div>
               </div>
             </div>
+            )}
 
             {/* Trend Indicators Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -668,12 +692,14 @@ export default function ComparePage() {
               </div>
             </div>
 
-            {/* Radar Comparison */}
-            <RadarComparison
-              school1Name={school1Name}
-              school2Name={school2Name}
-              diagnosisComparison={diagnosisComparison}
-            />
+            {/* Radar Comparison (requires diagnosis data) */}
+            {diagnosisComparison && (
+              <RadarComparison
+                school1Name={school1Name}
+                school2Name={school2Name}
+                diagnosisComparison={diagnosisComparison}
+              />
+            )}
 
             {/* Ranking Comparison */}
             <RankingComparison
@@ -695,13 +721,15 @@ export default function ComparePage() {
               }}
             />
 
-            {/* Competitive Analysis */}
-            <CompetitiveAnalysis
-              diagnosisComparison={diagnosisComparison}
-              school1Name={school1Name}
-              school2Name={school2Name}
-              perspectiveSchool={1}
-            />
+            {/* Competitive Analysis (requires diagnosis data) */}
+            {diagnosisComparison && (
+              <CompetitiveAnalysis
+                diagnosisComparison={diagnosisComparison}
+                school1Name={school1Name}
+                school2Name={school2Name}
+                perspectiveSchool={1}
+              />
+            )}
 
             {/* Quick Wins Comparison */}
             <QuickWinsComparison
@@ -762,6 +790,9 @@ export default function ComparePage() {
             uf: comparison?.escola2?.uf || undefined,
           }}
           diagnosisComparison={diagnosisComparison}
+          history1={history1}
+          history2={history2}
+          comparison={comparison}
         />
       </div>
     </div>
