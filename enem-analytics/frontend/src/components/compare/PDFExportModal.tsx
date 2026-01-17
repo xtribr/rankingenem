@@ -2,8 +2,20 @@
 
 import { useState } from 'react';
 import { X, FileDown, Loader2, Check, FileText } from 'lucide-react';
-import { generateExecutiveReport, ReportData } from './ExecutiveReportGenerator';
-import { DiagnosisComparisonResult } from '@/lib/api';
+import { generateExecutiveReport } from './ExecutiveReportGenerator';
+import { DiagnosisComparisonResult, SchoolHistory } from '@/lib/api';
+
+interface ComparisonYear {
+  ano: number;
+  escola1: {
+    nota_media: number | null;
+    ranking: number | null;
+  } | null;
+  escola2: {
+    nota_media: number | null;
+    ranking: number | null;
+  } | null;
+}
 
 interface PDFExportModalProps {
   isOpen: boolean;
@@ -23,6 +35,14 @@ interface PDFExportModalProps {
     uf?: string;
   };
   diagnosisComparison?: DiagnosisComparisonResult;
+  history1?: SchoolHistory;
+  history2?: SchoolHistory;
+  comparison?: {
+    escola1: { codigo_inep: string; nome_escola: string; uf: string | null };
+    escola2: { codigo_inep: string; nome_escola: string; uf: string | null };
+    common_years: number[];
+    comparison: ComparisonYear[];
+  };
 }
 
 export default function PDFExportModal({
@@ -35,6 +55,9 @@ export default function PDFExportModal({
   school1Data,
   school2Data,
   diagnosisComparison,
+  history1,
+  history2,
+  comparison,
 }: PDFExportModalProps) {
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
@@ -57,6 +80,7 @@ export default function PDFExportModal({
           nota_media: school1Data?.nota_media || null,
           ranking: school1Data?.ranking || null,
           uf: school1Data?.uf,
+          tipo_escola: history1?.tipo_escola,
         },
         school2: {
           codigo_inep: school2Code,
@@ -64,8 +88,12 @@ export default function PDFExportModal({
           nota_media: school2Data?.nota_media || null,
           ranking: school2Data?.ranking || null,
           uf: school2Data?.uf,
+          tipo_escola: history2?.tipo_escola,
         },
         diagnosisComparison,
+        history1,
+        history2,
+        comparison,
         generatedAt: new Date(),
       });
 
