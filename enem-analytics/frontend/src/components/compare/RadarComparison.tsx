@@ -42,9 +42,9 @@ export default function RadarComparison({
     topBrasil: topScores?.[area.area] || 900,
   }));
 
-  // Truncate names for legend
-  const school1Label = school1Name.length > 20 ? school1Name.slice(0, 20) + '...' : school1Name;
-  const school2Label = school2Name.length > 20 ? school2Name.slice(0, 20) + '...' : school2Name;
+  // Use labels directly (no truncation needed for anonymous labels)
+  const school1Label = school1Name;
+  const school2Label = school2Name;
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">

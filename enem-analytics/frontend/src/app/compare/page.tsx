@@ -89,6 +89,10 @@ export default function ComparePage() {
   const [school2Name, setSchool2Name] = useState('');
   const [showPdfModal, setShowPdfModal] = useState(false);
 
+  // Anonymous display labels for privacy in comparisons
+  const displayLabel1 = 'Escola 1';
+  const displayLabel2 = 'Escola 2';
+
   // Search queries
   const { data: results1, isLoading: searching1 } = useQuery({
     queryKey: ['search', search1],
@@ -161,11 +165,11 @@ export default function ComparePage() {
     setSearch2(nome);
   };
 
-  // Prepare chart data
+  // Prepare chart data with anonymous labels
   const evolutionData = comparison?.comparison?.map(year => ({
     ano: year.ano,
-    [school1Name.slice(0, 15)]: year.escola1?.nota_media || null,
-    [school2Name.slice(0, 15)]: year.escola2?.nota_media || null,
+    [displayLabel1]: year.escola1?.nota_media || null,
+    [displayLabel2]: year.escola2?.nota_media || null,
   })) || [];
 
   const areaData = diagnosisComparison?.area_comparison?.map(area => ({
@@ -460,7 +464,7 @@ export default function ComparePage() {
                       />
                       <Area
                         type="monotone"
-                        dataKey={school1Name.slice(0, 15)}
+                        dataKey={displayLabel1}
                         stroke={COLORS.blue}
                         strokeWidth={3}
                         fillOpacity={1}
@@ -468,7 +472,7 @@ export default function ComparePage() {
                       />
                       <Area
                         type="monotone"
-                        dataKey={school2Name.slice(0, 15)}
+                        dataKey={displayLabel2}
                         stroke={COLORS.green}
                         strokeWidth={3}
                         fillOpacity={1}
@@ -482,11 +486,11 @@ export default function ComparePage() {
                 <div className="flex items-center justify-center gap-6 mt-4">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.blue }}></div>
-                    <span className="text-sm text-gray-600">{school1Name.slice(0, 20)}</span>
+                    <span className="text-sm text-gray-600">{displayLabel1}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.green }}></div>
-                    <span className="text-sm text-gray-600">{school2Name.slice(0, 20)}</span>
+                    <span className="text-sm text-gray-600">{displayLabel2}</span>
                   </div>
                 </div>
               </div>
@@ -604,10 +608,10 @@ export default function ComparePage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: `${COLORS.blue}15`, color: COLORS.blue }}>
-                      {school1Name.slice(0, 10)}
+                      {displayLabel1}
                     </span>
                     <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: `${COLORS.green}15`, color: COLORS.green }}>
-                      {school2Name.slice(0, 10)}
+                      {displayLabel2}
                     </span>
                   </div>
                 </div>
@@ -626,8 +630,8 @@ export default function ComparePage() {
                           boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
                         }}
                       />
-                      <Bar dataKey="escola1" name={school1Name.slice(0, 15)} fill={COLORS.blue} radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="escola2" name={school2Name.slice(0, 15)} fill={COLORS.green} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="escola1" name={displayLabel1} fill={COLORS.blue} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="escola2" name={displayLabel2} fill={COLORS.green} radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -641,7 +645,7 @@ export default function ComparePage() {
               <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-500 mb-1">Tendência {school1Name.slice(0, 20)}</p>
+                    <p className="text-sm text-gray-500 mb-1">Tendência {displayLabel1}</p>
                     <div className="flex items-center gap-2">
                       {calculateTrend(history1) !== null && (
                         <>
@@ -668,7 +672,7 @@ export default function ComparePage() {
               <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-500 mb-1">Tendência {school2Name.slice(0, 20)}</p>
+                    <p className="text-sm text-gray-500 mb-1">Tendência {displayLabel2}</p>
                     <div className="flex items-center gap-2">
                       {calculateTrend(history2) !== null && (
                         <>
@@ -695,8 +699,8 @@ export default function ComparePage() {
             {/* Radar Comparison (requires diagnosis data) */}
             {diagnosisComparison && (
               <RadarComparison
-                school1Name={school1Name}
-                school2Name={school2Name}
+                school1Name={displayLabel1}
+                school2Name={displayLabel2}
                 diagnosisComparison={diagnosisComparison}
               />
             )}
@@ -705,7 +709,7 @@ export default function ComparePage() {
             <RankingComparison
               school1={{
                 codigo_inep: school1 || '',
-                nome_escola: school1Name,
+                nome_escola: displayLabel1,
                 uf: comparison?.escola1?.uf,
                 ranking: {
                   brasil: getLatestRanking(history1),
@@ -713,7 +717,7 @@ export default function ComparePage() {
               }}
               school2={{
                 codigo_inep: school2 || '',
-                nome_escola: school2Name,
+                nome_escola: displayLabel2,
                 uf: comparison?.escola2?.uf,
                 ranking: {
                   brasil: getLatestRanking(history2),
@@ -725,8 +729,8 @@ export default function ComparePage() {
             {diagnosisComparison && (
               <CompetitiveAnalysis
                 diagnosisComparison={diagnosisComparison}
-                school1Name={school1Name}
-                school2Name={school2Name}
+                school1Name={displayLabel1}
+                school2Name={displayLabel2}
                 perspectiveSchool={1}
               />
             )}
@@ -735,24 +739,24 @@ export default function ComparePage() {
             <QuickWinsComparison
               school1Code={school1!}
               school2Code={school2!}
-              school1Name={school1Name}
-              school2Name={school2Name}
+              school1Name={displayLabel1}
+              school2Name={displayLabel2}
             />
 
             {/* Success Stories Comparison */}
             <SuccessStoriesComparison
               school1Code={school1!}
               school2Code={school2!}
-              school1Name={school1Name}
-              school2Name={school2Name}
+              school1Name={displayLabel1}
+              school2Name={displayLabel2}
             />
 
             {/* TRI Analysis Comparison */}
             <TRIAnalysisComparison
               school1Code={school1!}
               school2Code={school2!}
-              school1Name={school1Name}
-              school2Name={school2Name}
+              school1Name={displayLabel1}
+              school2Name={displayLabel2}
             />
 
           </div>
@@ -775,8 +779,8 @@ export default function ComparePage() {
         <PDFExportModal
           isOpen={showPdfModal}
           onClose={() => setShowPdfModal(false)}
-          school1Name={school1Name}
-          school2Name={school2Name}
+          school1Name={displayLabel1}
+          school2Name={displayLabel2}
           school1Code={school1 || ''}
           school2Code={school2 || ''}
           school1Data={{
