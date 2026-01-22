@@ -99,14 +99,22 @@ async def compare_schools(
     Returns:
         Comparative analysis of both schools
     """
-    engine = get_diagnosis_engine()
+    try:
+        engine = get_diagnosis_engine()
+        comparison = engine.compare_schools(codigo_inep_1, codigo_inep_2)
 
-    comparison = engine.compare_schools(codigo_inep_1, codigo_inep_2)
+        if 'error' in comparison:
+            raise HTTPException(status_code=404, detail=comparison['error'])
 
-    if 'error' in comparison:
-        raise HTTPException(status_code=404, detail=comparison['error'])
-
-    return comparison
+        return comparison
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error comparing schools {codigo_inep_1} vs {codigo_inep_2}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error comparing schools: {str(e)}"
+        )
 
 
 @router.get("/{codigo_inep}/improvement-potential")
