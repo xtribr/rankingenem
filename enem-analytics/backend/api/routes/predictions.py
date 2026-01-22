@@ -268,7 +268,8 @@ async def get_tri_based_prediction_analysis(codigo_inep: str):
         'cn': ('Ciências da Natureza', 'CN', '#22c55e'),
         'ch': ('Ciências Humanas', 'CH', '#8b5cf6'),
         'lc': ('Linguagens', 'LC', '#ec4899'),
-        'mt': ('Matemática', 'MT', '#f97316')
+        'mt': ('Matemática', 'MT', '#f97316'),
+        'redacao': ('Redação', 'RE', '#3ABFF8')
     }
 
     latest = school_df.sort_values('ano').iloc[-1]
@@ -276,14 +277,45 @@ async def get_tri_based_prediction_analysis(codigo_inep: str):
     for area_key, (area_name, area_code, color) in area_mapping.items():
         current_score = latest.get(f'nota_{area_key}', 500)
         if pd.isna(current_score):
-            current_score = 500
+            current_score = 500 if area_key != 'redacao' else 600  # Redação uses 0-1000 scale
 
         predicted = predictions.get('scores', {}).get(area_key, current_score)
 
-        # Get TRI content stats for this area
+        # Get TRI content stats for this area (not applicable for Redação)
         accessible_content = []
         stretch_content = []
-        if preprocessor.tri_content_df is not None:
+
+        # Redação doesn't have TRI content - it's evaluated by competencies (C1-C5)
+        if area_key == 'redacao':
+            # For Redação, calculate mastery based on score range (0-1000)
+            mastery_level = current_score / 1000.0
+            # Gap to median (national avg around 600)
+            gap_to_median = current_score - 600
+            # Potential for improvement
+            potential = (1000 - current_score) / 1000.0
+
+            # Add competency-based "content" for Redação
+            competencies = [
+                {'skill': 'C1', 'tri_score': 200, 'description': 'Domínio da norma culta da língua escrita'},
+                {'skill': 'C2', 'tri_score': 200, 'description': 'Compreensão da proposta e aplicação de conceitos'},
+                {'skill': 'C3', 'tri_score': 200, 'description': 'Seleção e organização de informações e argumentos'},
+                {'skill': 'C4', 'tri_score': 200, 'description': 'Conhecimento dos mecanismos linguísticos de argumentação'},
+                {'skill': 'C5', 'tri_score': 200, 'description': 'Proposta de intervenção respeitando direitos humanos'},
+            ]
+
+            # Get competencia_redacao_media if available
+            comp_media = latest.get('competencia_redacao_media')
+            if pd.notna(comp_media):
+                avg_comp = float(comp_media)
+                # Accessible: competencies where school scores above 120
+                if avg_comp >= 120:
+                    accessible_content = [c for c in competencies if c['tri_score'] <= avg_comp + 40][:3]
+                # Stretch: competencies to improve
+                stretch_content = [
+                    {**c, 'gap': 200 - avg_comp}
+                    for c in competencies if c['tri_score'] > avg_comp
+                ][:3]
+        elif preprocessor.tri_content_df is not None:
             area_content = preprocessor.tri_content_df[preprocessor.tri_content_df['area_code'] == area_code]
 
             # Content school can handle now (TRI <= current score)
@@ -314,6 +346,16 @@ async def get_tri_based_prediction_analysis(codigo_inep: str):
                     for _, row in stretch.sample(min(5, len(stretch))).iterrows()
                 ]
 
+            mastery_level = tri_features.get(f'tri_mastery_level_{area_key}', 0.5)
+            gap_to_median = tri_features.get(f'tri_gap_to_median_{area_key}', 0)
+            potential = tri_features.get(f'tri_potential_{area_key}', 0)
+
+        # Set mastery/gap/potential for non-redacao areas
+        if area_key != 'redacao':
+            mastery_level = tri_features.get(f'tri_mastery_level_{area_key}', 0.5)
+            gap_to_median = tri_features.get(f'tri_gap_to_median_{area_key}', 0)
+            potential = tri_features.get(f'tri_potential_{area_key}', 0)
+
         area_analysis.append({
             'area': area_code,
             'area_name': area_name,
@@ -321,9 +363,9 @@ async def get_tri_based_prediction_analysis(codigo_inep: str):
             'current_score': float(current_score),
             'predicted_score': float(predicted),
             'expected_change': float(predicted - current_score),
-            'tri_mastery_level': tri_features.get(f'tri_mastery_level_{area_key}', 0.5),
-            'tri_gap_to_median': tri_features.get(f'tri_gap_to_median_{area_key}', 0),
-            'tri_potential': tri_features.get(f'tri_potential_{area_key}', 0),
+            'tri_mastery_level': mastery_level,
+            'tri_gap_to_median': gap_to_median,
+            'tri_potential': potential,
             'skill_gap_national': skill_gap_features.get(f'skill_gap_national_{area_key}', 0),
             'weak_skill_count': skill_gap_features.get(f'low_skill_count_{area_key}', 0),
             'accessible_content_sample': accessible_content,
@@ -370,7 +412,7 @@ def _get_improvement_recommendation(weak_skills: float) -> str:
 @router.get("/{codigo_inep}/area-projection/{area}")
 async def get_area_projection(
     codigo_inep: str,
-    area: str = PathParam(..., pattern="^(cn|ch|lc|mt|CN|CH|LC|MT)$")
+    area: str = PathParam(..., pattern="^(cn|ch|lc|mt|re|redacao|CN|CH|LC|MT|RE|REDACAO)$")
 ):
     """
     Get detailed TRI projection for a specific area.
@@ -380,7 +422,7 @@ async def get_area_projection(
 
     Args:
         codigo_inep: School INEP code
-        area: Area code (cn, ch, lc, mt)
+        area: Area code (cn, ch, lc, mt, re/redacao)
 
     Returns:
         Detailed projection with historical analysis and future TRI estimate
@@ -411,14 +453,17 @@ async def get_area_projection(
         'cn': ('Ciências da Natureza', 'CN', '#22c55e'),
         'ch': ('Ciências Humanas', 'CH', '#8b5cf6'),
         'lc': ('Linguagens', 'LC', '#ec4899'),
-        'mt': ('Matemática', 'MT', '#f97316')
+        'mt': ('Matemática', 'MT', '#f97316'),
+        're': ('Redação', 'RE', '#3ABFF8'),
+        'redacao': ('Redação', 'RE', '#3ABFF8')
     }
 
     if area_lower not in area_config:
         raise HTTPException(status_code=400, detail=f"Invalid area: {area}")
 
     area_name, area_code, color = area_config[area_lower]
-    nota_col = f'nota_{area_lower}'
+    # Handle Redação column name
+    nota_col = 'nota_redacao' if area_lower in ['re', 'redacao'] else f'nota_{area_lower}'
 
     # Extract historical TRI scores (all years)
     historical_scores = []
@@ -459,7 +504,35 @@ async def get_area_projection(
     # Get stretch content for this area
     stretch_content = []
     total_stretch_items = 0
-    if preprocessor.tri_content_df is not None:
+    is_redacao = area_lower in ['re', 'redacao']
+
+    if is_redacao:
+        # Redação uses competency-based content (C1-C5), each worth 0-200 points
+        # Total score is 0-1000
+        competencies = [
+            {'skill': 'C1', 'tri_score': 200, 'description': 'Domínio da norma culta da língua escrita'},
+            {'skill': 'C2', 'tri_score': 200, 'description': 'Compreensão da proposta e aplicação de conceitos de várias áreas'},
+            {'skill': 'C3', 'tri_score': 200, 'description': 'Seleção, organização e interpretação de informações e argumentos'},
+            {'skill': 'C4', 'tri_score': 200, 'description': 'Conhecimento dos mecanismos linguísticos para argumentação'},
+            {'skill': 'C5', 'tri_score': 200, 'description': 'Proposta de intervenção respeitando direitos humanos'},
+        ]
+
+        # Calculate average competency score based on current total
+        avg_comp = current_score / 5  # Average per competency
+
+        # "Stretch" content: competencies where school can improve
+        for comp in competencies:
+            gap = 200 - avg_comp
+            if gap > 20:  # Room for improvement
+                stretch_content.append({
+                    'skill': comp['skill'],
+                    'tri_score': 200.0,  # Max score per competency
+                    'description': comp['description'],
+                    'gap': float(gap)
+                })
+
+        total_stretch_items = len(stretch_content)
+    elif preprocessor.tri_content_df is not None:
         area_content = preprocessor.tri_content_df[
             preprocessor.tri_content_df['area_code'] == area_code
         ]
@@ -488,15 +561,23 @@ async def get_area_projection(
     next_year = current_year + 1
     trend_projection = intercept + slope * next_year
 
+    # For Redação, cap at 1000 (max score)
+    max_possible_score = 1000 if is_redacao else 850  # TRI areas rarely exceed 850
+
     # If school masters stretch content, they could reach the highest stretch TRI
     if len(stretch_content) > 0:
-        max_stretch_tri = max(s['tri_score'] for s in stretch_content)
-        avg_stretch_tri = sum(s['tri_score'] for s in stretch_content) / len(stretch_content)
+        if is_redacao:
+            # For Redação: optimistic = all competencies at 200 (total 1000)
+            max_stretch_tri = 1000
+            avg_stretch_tri = current_score + sum(s['gap'] for s in stretch_content) / 2
+        else:
+            max_stretch_tri = max(s['tri_score'] for s in stretch_content)
+            avg_stretch_tri = sum(s['tri_score'] for s in stretch_content) / len(stretch_content)
 
         # Conservative projection: average between trend and stretch mastery
         # Optimistic projection: if all stretch content is mastered
         conservative_projection = (trend_projection + avg_stretch_tri) / 2
-        optimistic_projection = max_stretch_tri
+        optimistic_projection = min(max_stretch_tri, max_possible_score)
 
         # Realistic projection based on historical improvement rate
         historical_max = max(scores)
@@ -513,14 +594,17 @@ async def get_area_projection(
             max_improvement = annual_change * 2 if annual_change > 0 else 20
 
         # Realistic projection: current + realistic improvement
-        realistic_projection = current_score + min(max_improvement * 1.5, 50)  # Cap at 50 points
+        # For Redação, allow higher improvements (it's on a 0-1000 scale vs ~400-800 for TRI)
+        improvement_cap = 100 if is_redacao else 50
+        realistic_projection = current_score + min(max_improvement * 1.5, improvement_cap)
         realistic_projection = min(realistic_projection, optimistic_projection)  # Can't exceed max stretch
+        realistic_projection = min(realistic_projection, max_possible_score)  # Cap at max possible
     else:
         conservative_projection = trend_projection
-        optimistic_projection = trend_projection + 30
-        realistic_projection = trend_projection + 15
+        optimistic_projection = min(trend_projection + (60 if is_redacao else 30), max_possible_score)
+        realistic_projection = min(trend_projection + (30 if is_redacao else 15), max_possible_score)
         avg_improvement = annual_change if annual_change > 0 else 0
-        max_improvement = annual_change * 2 if annual_change > 0 else 20
+        max_improvement = annual_change * 2 if annual_change > 0 else (40 if is_redacao else 20)
 
     # Calculate confidence interval using historical volatility
     if len(scores) >= 3:

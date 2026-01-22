@@ -454,7 +454,7 @@ function AreaCard({
 
         <div className="mt-4">
           <div className="flex justify-between text-xs text-gray-500 mb-1">
-            <span>Domínio TRI</span>
+            <span>{area.area === 'RE' ? 'Domínio Competências' : 'Domínio TRI'}</span>
             <span>{masteryPercent}%</span>
           </div>
           <div className="w-full bg-gray-100 rounded-full h-2">
@@ -491,7 +491,7 @@ function AreaCard({
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                Conteúdo Dominado
+                {area.area === 'RE' ? 'Competências Fortes' : 'Conteúdo Dominado'}
               </h4>
               {area.accessible_content_sample.length > 0 ? (
                 <ul className="space-y-2">
@@ -499,7 +499,7 @@ function AreaCard({
                     <li key={idx} className="text-xs bg-white p-2 rounded border border-gray-100">
                       <div className="flex justify-between items-start mb-1">
                         <span className="font-mono text-green-600 font-medium">{content.skill}</span>
-                        <span className="text-gray-400">TRI: {content.tri_score.toFixed(0)}</span>
+                        <span className="text-gray-400">{area.area === 'RE' ? 'Máx' : 'TRI'}: {content.tri_score.toFixed(0)}</span>
                       </div>
                       <p className="text-gray-600 line-clamp-2">{content.description}</p>
                     </li>
@@ -516,7 +516,7 @@ function AreaCard({
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                 </svg>
-                Próximos Desafios
+                {area.area === 'RE' ? 'Competências a Desenvolver' : 'Próximos Desafios'}
               </h4>
               {area.stretch_content_sample.length > 0 ? (
                 <ul className="space-y-2">
@@ -525,7 +525,7 @@ function AreaCard({
                       <div className="flex justify-between items-start mb-1">
                         <span className="font-mono text-amber-600 font-medium">{content.skill}</span>
                         <span className="text-gray-400">
-                          TRI: {content.tri_score.toFixed(0)}
+                          {area.area === 'RE' ? 'Máx' : 'TRI'}: {content.tri_score.toFixed(0)}
                           {content.gap && <span className="text-red-500 ml-1">(+{content.gap.toFixed(0)})</span>}
                         </span>
                       </div>
@@ -609,7 +609,7 @@ export default function TRIAnalysis({ codigoInep }: TRIAnalysisProps) {
           </div>
 
           {/* Summary Stats */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-5 gap-3">
             {data.area_analysis.map((area) => (
               <div
                 key={area.area}
@@ -651,7 +651,7 @@ export default function TRIAnalysis({ codigoInep }: TRIAnalysisProps) {
           <div className="text-xs text-gray-400 text-center pt-4 border-t border-gray-100">
             Análise baseada em {data.area_analysis.reduce((acc, a) =>
               acc + a.accessible_content_sample.length + a.stretch_content_sample.length, 0
-            )} itens de conteúdo TRI
+            )} itens de conteúdo (TRI e competências)
           </div>
         </div>
       </div>
