@@ -144,6 +144,11 @@ export default function ComparePage() {
     return history.history[history.history.length - 1].ranking_brasil;
   };
 
+  const getLatestRankingUF = (history: typeof history1) => {
+    if (!history?.history || history.history.length === 0) return null;
+    return history.history[history.history.length - 1].ranking_uf;
+  };
+
   const calculateTrend = (history: typeof history1) => {
     if (!history?.history || history.history.length < 2) return null;
     const validYears = history.history.filter(h => h.nota_media !== null);
@@ -713,6 +718,7 @@ export default function ComparePage() {
                 uf: comparison?.escola1?.uf,
                 ranking: {
                   brasil: getLatestRanking(history1),
+                  estado: getLatestRankingUF(history1),
                 },
               }}
               school2={{
@@ -721,6 +727,7 @@ export default function ComparePage() {
                 uf: comparison?.escola2?.uf,
                 ranking: {
                   brasil: getLatestRanking(history2),
+                  estado: getLatestRankingUF(history2),
                 },
               }}
             />

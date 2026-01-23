@@ -110,7 +110,9 @@ export default function RankingComparison({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {rankings.map(ranking => {
+            {rankings
+              .filter(ranking => ranking.school1 !== null && ranking.school1 !== undefined || ranking.school2 !== null && ranking.school2 !== undefined)
+              .map(ranking => {
               const diff = ranking.school1 && ranking.school2
                 ? ranking.school2 - ranking.school1
                 : null;

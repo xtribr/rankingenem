@@ -461,6 +461,7 @@ async def get_school_history(codigo_inep: str):
         history.append({
             "ano": int(row["ano"]),
             "ranking_brasil": ranking,
+            "ranking_uf": int(row["ranking_uf"]) if pd.notna(row.get("ranking_uf")) else None,
             "ranking_change": ranking_change,
             "nota_media": nota,
             "nota_change": nota_change,

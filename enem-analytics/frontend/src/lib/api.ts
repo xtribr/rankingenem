@@ -28,6 +28,7 @@ export interface SchoolScore {
   nota_redacao: number | null;
   nota_media: number | null;
   ranking_brasil: number | null;
+  ranking_uf: number | null;
   desempenho_habilidades: number | null;
   competencia_redacao_media: number | null;
 }
@@ -439,6 +440,7 @@ export interface SchoolHistory {
   history: {
     ano: number;
     ranking_brasil: number | null;
+    ranking_uf: number | null;
     ranking_change: number | null;
     nota_media: number | null;
     nota_change: number | null;
