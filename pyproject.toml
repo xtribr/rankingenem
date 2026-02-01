@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0.0"]
+requires = ["setuptools>=61.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
@@ -10,15 +10,83 @@ version = {attr = "gliner2.__version__"}
 
 [project]
 name = "gliner2"
+description = "Unified Schema-Based Information Extraction"
 readme = "README.md"
 requires-python = ">=3.8"
-
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "Urchade Zaratiana"},
+    {name = "Fastino AI"},
+]
 maintainers = [
     {name = "Urchade Zaratiana"},
 ]
 
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Linguistic",
+]
+
+keywords = ["nlp", "information-extraction", "ner", "relation-extraction", "text-classification"]
+
 dependencies = [
-    "gliner",
+    "torch>=2.0.0",
+    "transformers>=4.36.0",
+    "safetensors>=0.4.0",
+    # Gliner com versão fixa para evitar conflitos com onnxruntime
+    "gliner>=0.2.23,<0.2.24",
+    # Scipy com suporte condicional para ARM
+    "scipy>=1.11.4; platform_machine != 'arm64'",
+    "scipy>=1.11.4; platform_machine == 'arm64' and python_version < '3.14'",
+    # Dependências básicas
+    "regex>=2023.0.0",
+    "typing-extensions>=4.5.0; python_version<'3.11'",
 ]
 
 dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/fastino-ai/GLiNER2"
+Repository = "https://github.com/fastino-ai/GLiNER2"
+Documentation = "https://github.com/fastino-ai/GLiNER2#readme"
+Issues = "https://github.com/fastino-ai/GLiNER2/issues"
+
+[project.optional-dependencies]
+full = [
+    "onnxruntime>=1.16.0; platform_machine != 'arm64'",
+    "onnxruntime-silicon>=1.16.0; platform_machine == 'arm64'",
+    "accelerate>=0.25.0",
+    "datasets>=2.15.0",
+]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.1.0",
+    "mypy>=1.8.0",
+]
+docs = [
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.5.0",
+    "mkdocstrings[python]>=0.24.0",
+]
+
+[project.scripts]
+gliner2-demo = "gliner2.demo:main"
+
+[tool.setuptools.package-data]
+"gliner2" = ["py.typed"]
