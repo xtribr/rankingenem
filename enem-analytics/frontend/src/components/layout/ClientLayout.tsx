@@ -103,10 +103,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   // Admin users see the full sidebar layout
   return (
-    <div className="flex">
+    <div className="flex bg-slate-50 min-h-screen">
       <Sidebar />
-      <main className={`flex-1 min-h-screen transition-all duration-300 p-6 ${
-        collapsed ? 'ml-20' : 'ml-64'
+      <main className={`flex-1 min-h-screen transition-all duration-300 ease-in-out ${
+        collapsed ? 'ml-16' : 'ml-56'
       }`}>
         {children}
       </main>
