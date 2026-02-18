@@ -98,6 +98,8 @@ app.add_middleware(
         "https://www.xtriprovas.app",
         "https://xtriprovas.app",
         "https://frontend-alpha-ten-weodp2t3hu.vercel.app",
+        "https://rankingenem.com",
+        "https://www.rankingenem.com",
         "http://localhost:3000",
         "http://localhost:3001",
         "http://127.0.0.1:3000",
