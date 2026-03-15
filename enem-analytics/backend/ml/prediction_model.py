@@ -20,6 +20,21 @@ except (ImportError, Exception) as e:
 
 from .preprocessor import ENEMPreprocessor
 
+# Score bounds based on real school averages in database (2018-2024)
+# These are NOT individual student limits — they are school average limits
+SCORE_BOUNDS = {
+    'nota_cn':      {'min': 300, 'max': 750},
+    'nota_ch':      {'min': 280, 'max': 750},
+    'nota_lc':      {'min': 280, 'max': 700},
+    'nota_mt':      {'min': 300, 'max': 900},
+    'nota_redacao': {'min': 0,   'max': 960},
+    'nota_media':   {'min': 300, 'max': 800},
+}
+
+# The model was trained on data up to 2022 → target 2023.
+# At inference, it uses the latest available data to predict the NEXT year.
+MODEL_TRAINING_TARGET_YEAR = 2023
+
 
 class ENEMPredictionModel:
     """Prediction model for ENEM school scores"""
@@ -195,7 +210,11 @@ class ENEMPredictionModel:
 
         # Predict
         model = self.models[target]
-        prediction = model.predict(X)[0]
+        raw_prediction = float(model.predict(X)[0])
+
+        # Clamp prediction to real school average bounds
+        bounds = SCORE_BOUNDS.get(target, {'min': 200, 'max': 900})
+        prediction = max(bounds['min'], min(bounds['max'], raw_prediction))
 
         # Estimate confidence interval (using training RMSE as proxy)
         target_short = target.replace('nota_', '')
@@ -206,20 +225,28 @@ class ENEMPredictionModel:
         else:
             rmse = 30  # Default uncertainty
 
+        # Clamp confidence interval to valid bounds
+        ci_low = max(bounds['min'], prediction - 1.96 * rmse)
+        ci_high = min(bounds['max'], prediction + 1.96 * rmse)
+
         return {
             'codigo_inep': codigo_inep,
             'target': target,
-            'prediction': float(prediction),
+            'prediction': prediction,
             'confidence_interval': {
-                'low': float(prediction - 1.96 * rmse),
-                'high': float(prediction + 1.96 * rmse)
+                'low': float(ci_low),
+                'high': float(ci_high)
             },
             'uncertainty': float(rmse)
         }
 
     def predict_all_scores(self, codigo_inep: str) -> Dict:
         """
-        Predict all TRI scores for a school
+        Predict all TRI scores for a school.
+
+        The model was trained on data ≤2022 to predict 2023.
+        At inference it uses the school's latest data to predict the next year.
+        The prediction represents an ESTIMATE with a margin of error (RMSE).
 
         Args:
             codigo_inep: School INEP code
@@ -229,7 +256,14 @@ class ENEMPredictionModel:
         """
         targets = ['nota_cn', 'nota_ch', 'nota_lc', 'nota_mt', 'nota_redacao', 'nota_media']
 
-        predictions = {'codigo_inep': codigo_inep, 'target_year': 2025}
+        predictions = {
+            'codigo_inep': codigo_inep,
+            'target_year': 2025,
+            'disclaimer': (
+                'Estimativa baseada em modelo preditivo (R²=0.88, erro médio ~21 pontos). '
+                'Não é uma garantia de resultado.'
+            ),
+        }
         predictions['scores'] = {}
         predictions['confidence_intervals'] = {}
 
@@ -242,6 +276,12 @@ class ENEMPredictionModel:
             except Exception as e:
                 print(f"Error predicting {target}: {e}")
                 continue
+
+        if not predictions['scores']:
+            predictions['error'] = (
+                'Dados insuficientes para gerar um prediction assertivo para esta escola. '
+                'A escola pode não ter histórico suficiente no ENEM.'
+            )
 
         return predictions
 

@@ -755,14 +755,17 @@ async def predict_single_score(
 @router.get("/{codigo_inep}", response_model=PredictionResult)
 async def predict_school_scores(
     codigo_inep: str,
-    target_year: int = Query(2025, ge=2024, le=2030)
+    target_year: int = Query(2025, ge=2025, le=2025)
 ):
     """
-    Predict all TRI scores for a school
+    Predict all TRI scores for a school.
+
+    The model predicts the next ENEM cycle (2025) based on historical data.
+    It cannot extrapolate to years beyond 2025.
 
     Args:
         codigo_inep: School INEP code
-        target_year: Year to predict for (default: 2025)
+        target_year: Fixed at 2025 (model does not support other years)
 
     Returns:
         Predicted scores with confidence intervals
@@ -776,6 +779,9 @@ async def predict_school_scores(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
 
+    if 'error' in result:
+        raise HTTPException(status_code=422, detail=result['error'])
+
     # Format confidence intervals
     confidence_intervals = {}
     for key, ci in result.get('confidence_intervals', {}).items():
@@ -786,13 +792,12 @@ async def predict_school_scores(
 
     return PredictionResult(
         codigo_inep=codigo_inep,
-        target_year=target_year,
+        target_year=2025,
         scores=result.get('scores', {}),
         confidence_intervals=confidence_intervals,
         model_info={
             "algorithm": "HistGradientBoostingRegressor",
-            "features": 64,  # Updated with TRI features
-            "training_samples": 15807,
-            "uses_tri_analysis": True
+            "training_samples": result.get('training_info', {}).get('samples', 15807),
+            "disclaimer": result.get('disclaimer', ''),
         }
     )
