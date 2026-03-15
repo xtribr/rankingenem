@@ -261,7 +261,7 @@ class SchoolSummary(BaseModel):
     qt_matriculas: Optional[int] = None
     ultimo_ranking: Optional[int] = None
     ultima_nota: Optional[float] = None
-    anos_participacao: int
+    anos_participacao: Optional[int] = None
 
 
 class SchoolDetail(BaseModel):
