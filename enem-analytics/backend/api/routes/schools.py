@@ -22,8 +22,8 @@ def get_supabase():
         _supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
     return _supabase_client
 
-# DuckDB-based data layer for fast queries
-from data.duckdb_store import (
+# Supabase-based data layer
+from data.supabase_store import (
     list_schools as duckdb_list_schools,
     get_top_schools as duckdb_get_top_schools,
     search_schools as duckdb_search_schools,
@@ -275,16 +275,10 @@ class SchoolDetail(BaseModel):
     melhor_ranking: Optional[int] = None
 
 
-def get_df():
-    """Import here to avoid circular imports"""
-    from api.main import get_dataframe
-    return get_dataframe()
-
-
-def get_latest_df():
-    """Get cached DataFrame for latest year"""
-    from api.main import get_latest_year_df
-    return get_latest_year_df()
+def get_supabase_store():
+    """Get Supabase store client"""
+    from data.supabase_store import get_client
+    return get_client()
 
 
 @router.get("/", response_model=List[SchoolSummary])
@@ -425,63 +419,55 @@ async def get_school(codigo_inep: str):
 
 @router.get("/{codigo_inep}/history")
 async def get_school_history(codigo_inep: str):
-    """
-    Get complete history for a school with year-over-year comparison
-    """
-    df = get_df()
-    if df is None:
-        raise HTTPException(status_code=500, detail="Data not loaded")
+    """Get complete history for a school with year-over-year comparison"""
+    client = get_supabase_store()
+    result = client.table("enem_results").select(
+        "ano, nome_escola, uf, dependencia, media_cn, media_ch, media_lc, "
+        "media_mt, media_redacao, media_geral, ranking_nacional, ranking_uf"
+    ).eq("codigo_inep", codigo_inep).order("ano").execute()
 
-    df_school = df[df["codigo_inep"] == codigo_inep].copy()
-
-    if df_school.empty:
+    if not result.data:
         raise HTTPException(status_code=404, detail=f"School {codigo_inep} not found")
 
-    df_school = df_school.sort_values("ano")
-    latest = df_school.iloc[-1]
-
+    latest = result.data[-1]
     history = []
     prev_ranking = None
     prev_nota = None
 
-    for _, row in df_school.iterrows():
-        ranking = int(row["ranking_brasil"]) if pd.notna(row.get("ranking_brasil")) else None
-        nota = float(round(row["nota_media"], 2)) if pd.notna(row.get("nota_media")) else None
+    for row in result.data:
+        ranking = row.get("ranking_nacional")
+        nota = float(row["media_geral"]) if row.get("media_geral") else None
 
-        # Calculate year-over-year changes
         ranking_change = None
         nota_change = None
-
         if ranking is not None and prev_ranking is not None:
-            ranking_change = prev_ranking - ranking  # Positive = improved
-
+            ranking_change = prev_ranking - ranking
         if nota is not None and prev_nota is not None:
-            nota_change = float(round(nota - prev_nota, 2))
+            nota_change = round(nota - prev_nota, 2)
 
         history.append({
-            "ano": int(row["ano"]),
+            "ano": row["ano"],
             "ranking_brasil": ranking,
-            "ranking_uf": int(row["ranking_uf"]) if pd.notna(row.get("ranking_uf")) else None,
+            "ranking_uf": row.get("ranking_uf"),
             "ranking_change": ranking_change,
-            "nota_media": nota,
+            "nota_media": round(nota, 2) if nota else None,
             "nota_change": nota_change,
-            "nota_cn": float(round(row["nota_cn"], 2)) if pd.notna(row.get("nota_cn")) else None,
-            "nota_ch": float(round(row["nota_ch"], 2)) if pd.notna(row.get("nota_ch")) else None,
-            "nota_lc": float(round(row["nota_lc"], 2)) if pd.notna(row.get("nota_lc")) else None,
-            "nota_mt": float(round(row["nota_mt"], 2)) if pd.notna(row.get("nota_mt")) else None,
-            "nota_redacao": float(round(row["nota_redacao"], 2)) if pd.notna(row.get("nota_redacao")) else None,
-            "desempenho_habilidades": float(round(row["desempenho_habilidades"], 4)) if pd.notna(row.get("desempenho_habilidades")) else None,
-            "competencia_redacao_media": float(round(row["competencia_redacao_media"], 2)) if pd.notna(row.get("competencia_redacao_media")) else None,
+            "nota_cn": float(row["media_cn"]) if row.get("media_cn") else None,
+            "nota_ch": float(row["media_ch"]) if row.get("media_ch") else None,
+            "nota_lc": float(row["media_lc"]) if row.get("media_lc") else None,
+            "nota_mt": float(row["media_mt"]) if row.get("media_mt") else None,
+            "nota_redacao": float(row["media_redacao"]) if row.get("media_redacao") else None,
+            "desempenho_habilidades": None,
+            "competencia_redacao_media": None,
         })
-
         prev_ranking = ranking
         prev_nota = nota
 
     return {
-        "codigo_inep": str(codigo_inep),
-        "nome_escola": str(latest["nome_escola"]),
-        "uf": str(latest["uf"]) if pd.notna(latest.get("uf")) else None,
-        "tipo_escola": str(latest["tipo_escola"]) if pd.notna(latest.get("tipo_escola")) else None,
+        "codigo_inep": codigo_inep,
+        "nome_escola": latest.get("nome_escola"),
+        "uf": latest.get("uf"),
+        "tipo_escola": latest.get("dependencia"),
         "anos_participacao": len(history),
         "history": history
     }
@@ -489,56 +475,52 @@ async def get_school_history(codigo_inep: str):
 
 @router.get("/compare/{inep1}/{inep2}")
 async def compare_schools(inep1: str, inep2: str):
-    """
-    Compare two schools side by side
-    """
-    df = get_df()
-    if df is None:
-        raise HTTPException(status_code=500, detail="Data not loaded")
+    """Compare two schools side by side"""
+    client = get_supabase_store()
 
-    df1 = df[df["codigo_inep"] == inep1]
-    df2 = df[df["codigo_inep"] == inep2]
+    r1 = client.table("enem_results").select(
+        "ano, nome_escola, uf, media_geral, ranking_nacional"
+    ).eq("codigo_inep", inep1).order("ano").execute()
 
-    if df1.empty:
+    r2 = client.table("enem_results").select(
+        "ano, nome_escola, uf, media_geral, ranking_nacional"
+    ).eq("codigo_inep", inep2).order("ano").execute()
+
+    if not r1.data:
         raise HTTPException(status_code=404, detail=f"School {inep1} not found")
-    if df2.empty:
+    if not r2.data:
         raise HTTPException(status_code=404, detail=f"School {inep2} not found")
 
-    # Get common years
-    years1 = set(int(y) for y in df1["ano"].tolist())
-    years2 = set(int(y) for y in df2["ano"].tolist())
-    common_years = sorted(years1 & years2)
+    years1 = {r["ano"]: r for r in r1.data}
+    years2 = {r["ano"]: r for r in r2.data}
+    common_years = sorted(set(years1.keys()) & set(years2.keys()))
 
     comparison = []
     for year in common_years:
-        row1 = df1[df1["ano"] == year].iloc[0]
-        row2 = df2[df2["ano"] == year].iloc[0]
-
+        row1 = years1[year]
+        row2 = years2[year]
         comparison.append({
-            "ano": int(year),
+            "ano": year,
             "escola1": {
-                "nota_media": float(round(row1["nota_media"], 2)) if pd.notna(row1.get("nota_media")) else None,
-                "ranking": int(row1["ranking_brasil"]) if pd.notna(row1.get("ranking_brasil")) else None,
+                "nota_media": float(row1["media_geral"]) if row1.get("media_geral") else None,
+                "ranking": row1.get("ranking_nacional"),
             },
             "escola2": {
-                "nota_media": float(round(row2["nota_media"], 2)) if pd.notna(row2.get("nota_media")) else None,
-                "ranking": int(row2["ranking_brasil"]) if pd.notna(row2.get("ranking_brasil")) else None,
+                "nota_media": float(row2["media_geral"]) if row2.get("media_geral") else None,
+                "ranking": row2.get("ranking_nacional"),
             }
         })
 
-    latest1 = df1.iloc[-1]
-    latest2 = df2.iloc[-1]
-
     return {
         "escola1": {
-            "codigo_inep": str(inep1),
-            "nome_escola": str(latest1["nome_escola"]),
-            "uf": str(latest1["uf"]) if pd.notna(latest1.get("uf")) else None
+            "codigo_inep": inep1,
+            "nome_escola": r1.data[-1].get("nome_escola"),
+            "uf": r1.data[-1].get("uf"),
         },
         "escola2": {
-            "codigo_inep": str(inep2),
-            "nome_escola": str(latest2["nome_escola"]),
-            "uf": str(latest2["uf"]) if pd.notna(latest2.get("uf")) else None
+            "codigo_inep": inep2,
+            "nome_escola": r2.data[-1].get("nome_escola"),
+            "uf": r2.data[-1].get("uf"),
         },
         "common_years": common_years,
         "comparison": comparison
