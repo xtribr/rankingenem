@@ -206,10 +206,21 @@ async def get_recommended_content(
     all_key_concepts = set()
     all_key_themes = set()
 
+    # Check if predictions have actual scores
+    scores = predictions.get('scores', {})
+    if not scores:
+        raise HTTPException(
+            status_code=422,
+            detail="Dados insuficientes para gerar um prediction assertivo para esta escola. "
+                   "A escola pode não ter histórico suficiente no ENEM."
+        )
+
     for area_code, area_name in AREA_NAMES.items():
         # Get predicted score for this area (keys are short: cn, ch, lc, mt)
         score_key = area_code.lower()
-        predicted_score = predictions.get('scores', {}).get(score_key, 550)
+        predicted_score = scores.get(score_key)
+        if predicted_score is None:
+            continue  # Skip areas without prediction
 
         # Determine study range
         study_range = get_recommended_range(predicted_score)
@@ -396,10 +407,19 @@ async def get_school_materials(codigo_inep: str):
         'mt': ('MT', 'Matemática')
     }
 
+    scores = predictions.get('scores', {})
+    if not scores:
+        raise HTTPException(
+            status_code=422,
+            detail="Dados insuficientes para gerar um prediction assertivo para esta escola."
+        )
+
     materials_by_area = {}
 
     for score_key, (area_code, area_name) in area_map.items():
-        predicted_score = predictions.get('scores', {}).get(score_key, 550)
+        predicted_score = scores.get(score_key)
+        if predicted_score is None:
+            continue
         recommended_range = get_recommended_range(predicted_score)
 
         # Map recommended range to folder name patterns
@@ -515,8 +535,17 @@ async def export_improvement_plan(codigo_inep: str):
         'mt': 'Matemática'
     }
 
+    scores = predictions.get('scores', {})
+    if not scores:
+        raise HTTPException(
+            status_code=422,
+            detail="Dados insuficientes para gerar um prediction assertivo para esta escola."
+        )
+
     for area_key, area_name in area_names.items():
-        score = predictions.get('scores', {}).get(area_key, 550)
+        score = scores.get(area_key)
+        if score is None:
+            continue
         target = score + 50  # Meta de melhoria
         rec_range = get_recommended_range(score)
         range_info = TRI_RANGES[rec_range]
@@ -537,7 +566,9 @@ async def export_improvement_plan(codigo_inep: str):
 
     for area_key, area_name in area_names.items():
         area_code = area_key.upper()
-        score = predictions.get('scores', {}).get(area_key, 550)
+        score = scores.get(area_key)
+        if score is None:
+            continue
         rec_range = get_recommended_range(score)
 
         writer.writerow([])
