@@ -109,6 +109,20 @@ def parse_list_field(value: Any) -> List[str]:
     return [item.strip() for item in str(value).split(',') if item.strip()]
 
 
+def parse_confidence_field(value: Any) -> List[float]:
+    """Parse comma-separated confidence scores into list of floats."""
+    if pd.isna(value) or not value:
+        return []
+    result = []
+    for item in str(value).split(','):
+        item = item.strip()
+        try:
+            result.append(float(item))
+        except (ValueError, TypeError):
+            result.append(0.0)
+    return result
+
+
 AREA_NAMES = {
     'CN': 'Ciências da Natureza',
     'CH': 'Ciências Humanas',
@@ -202,16 +216,18 @@ async def get_school_concept_analysis(
         concept_semantic: Dict[str, set] = {}  # concept -> related semantic fields
         concept_lexical: Dict[str, set] = {}  # concept -> related lexical fields
         concept_skill_codes: Dict[str, set] = {}  # concept -> related ENEM skills
+        concept_confidences: Dict[str, List[float]] = {}  # concept -> list of real model confidences
 
         for _, row in area_df.iterrows():
             row_concepts = parse_list_field(row.get('conceitos_cientificos'))
+            row_concept_confs = parse_confidence_field(row.get('conceitos_cientificos_confidence'))
             row_semantic = parse_list_field(row.get('campos_semanticos'))
             row_lexical = parse_list_field(row.get('campos_lexicais'))
             row_processes = parse_list_field(row.get('processos_fenomenos'))
             row_historical = parse_list_field(row.get('contextos_historicos'))
             row_compound_skills = parse_list_field(row.get('habilidades_compostas'))
 
-            for c in row_concepts:
+            for i, c in enumerate(row_concepts):
                 concepts[c] += 1
                 if c not in concept_semantic:
                     concept_semantic[c] = set()
@@ -225,22 +241,33 @@ async def get_school_concept_analysis(
                     concept_skill_codes[c] = set()
                 concept_skill_codes[c].add(row.get('habilidade', ''))
 
+                # Collect real model confidence scores
+                if c not in concept_confidences:
+                    concept_confidences[c] = []
+                if i < len(row_concept_confs) and row_concept_confs[i] > 0:
+                    concept_confidences[c].append(row_concept_confs[i])
+
             semantic_fields.update(row_semantic)
             lexical_fields.update(row_lexical)
             processes.update(row_processes)
             historical_contexts.update(row_historical)
             compound_skills.update(row_compound_skills)
 
-        # Build concept details with related info
+        # Build concept details with real model confidence
         concept_details = []
         total_concepts = sum(concepts.values())
         for concept, count in concepts.most_common(top_n):
             freq = count / total_concepts if total_concepts > 0 else 0
+
+            # Use real GLiNER confidence (average across occurrences)
+            real_confs = concept_confidences.get(concept, [])
+            avg_confidence = sum(real_confs) / len(real_confs) if real_confs else None
+
             concept_details.append({
                 'concept': concept,
                 'count': count,
                 'frequency': round(freq * 100, 1),
-                'confidence': min(0.95, 0.5 + freq),  # Simulated confidence based on frequency
+                'confidence': round(avg_confidence, 4) if avg_confidence is not None else None,
                 'semantic_fields': list(concept_semantic.get(concept, set()))[:5],
                 'lexical_fields': list(concept_lexical.get(concept, set()))[:3],
                 'related_skills': list(concept_skill_codes.get(concept, set()))[:3],

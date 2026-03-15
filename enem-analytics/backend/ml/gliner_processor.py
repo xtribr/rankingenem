@@ -135,12 +135,14 @@ def filter_entity(entity_text: str) -> bool:
     return True
 
 
-def clean_entities(entities_dict: Dict[str, List[str]]) -> Dict[str, List[str]]:
+def clean_entities(entities_dict: Dict[str, Any]) -> Dict[str, Any]:
     """
     Clean and filter extracted entities.
+    Handles both plain text lists and confidence-annotated dicts.
 
     Args:
         entities_dict: Dictionary of entity type -> list of entities
+                       Entities can be strings or dicts with 'text' and 'confidence'
 
     Returns:
         Cleaned dictionary with filtered entities
@@ -148,16 +150,27 @@ def clean_entities(entities_dict: Dict[str, List[str]]) -> Dict[str, List[str]]:
     cleaned = {}
     for entity_type, entities in entities_dict.items():
         if isinstance(entities, list):
-            # Filter entities
-            filtered = [e for e in entities if filter_entity(e)]
-            # Remove duplicates while preserving order
             seen = set()
             unique = []
-            for e in filtered:
-                e_lower = e.lower().strip()
-                if e_lower not in seen:
-                    seen.add(e_lower)
-                    unique.append(e)
+            for e in entities:
+                # Handle both plain strings and confidence dicts
+                if isinstance(e, dict):
+                    text = e.get('text', '')
+                    confidence = e.get('confidence', 0.0)
+                else:
+                    text = e
+                    confidence = None
+
+                if not filter_entity(text):
+                    continue
+
+                text_lower = text.lower().strip()
+                if text_lower not in seen:
+                    seen.add(text_lower)
+                    if confidence is not None:
+                        unique.append({'text': text, 'confidence': confidence})
+                    else:
+                        unique.append(text)
             if unique:
                 cleaned[entity_type] = unique
     return cleaned
@@ -206,16 +219,19 @@ class GLiNERLocalProcessor:
             logger.warning(f"Failed to save cache: {e}")
 
     def extract_from_description(self, description: str) -> Dict[str, Any]:
-        """Extract entities from a single description using local model."""
+        """Extract entities from a single description using local model with real confidence."""
         cache_key = description[:100]
         if cache_key in self._cache:
             return self._cache[cache_key]
 
         try:
             labels = list(ENTITY_TYPES.keys())
-            result = self.model.extract_entities(description, labels, threshold=0.3)
+            result = self.model.extract_entities(
+                description, labels, threshold=0.3,
+                include_confidence=True
+            )
 
-            # Clean and filter entities
+            # Clean and filter entities (now handles confidence dicts)
             if 'entities' in result:
                 result['entities'] = clean_entities(result['entities'])
 
@@ -401,37 +417,52 @@ class GLiNERProcessor:
         descriptions = df['descricao'].tolist()
         extraction_results = self.batch_extract(descriptions)
 
-        # Add extracted fields to dataframe - new entity types for compound phrases
-        df['conceitos_cientificos'] = [
-            ', '.join(r.get('entities', {}).get('conceito_cientifico', [])) if r else ''
-            for r in extraction_results
-        ]
-        df['campos_semanticos'] = [
-            ', '.join(r.get('entities', {}).get('campo_semantico', [])) if r else ''
-            for r in extraction_results
-        ]
-        df['campos_lexicais'] = [
-            ', '.join(r.get('entities', {}).get('campo_lexical', [])) if r else ''
-            for r in extraction_results
-        ]
-        df['processos_fenomenos'] = [
-            ', '.join(r.get('entities', {}).get('processo_fenomeno', [])) if r else ''
-            for r in extraction_results
-        ]
-        df['contextos_historicos'] = [
-            ', '.join(r.get('entities', {}).get('contexto_historico', [])) if r else ''
-            for r in extraction_results
-        ]
-        df['habilidades_compostas'] = [
-            ', '.join(r.get('entities', {}).get('habilidade_composta', [])) if r else ''
-            for r in extraction_results
-        ]
+        def _extract_texts(entities_list):
+            """Extract text from entity list (handles both str and confidence dicts)."""
+            texts = []
+            for e in entities_list:
+                if isinstance(e, dict):
+                    texts.append(e.get('text', ''))
+                else:
+                    texts.append(e)
+            return texts
+
+        def _extract_confidences(entities_list):
+            """Extract confidence scores from entity list."""
+            confs = []
+            for e in entities_list:
+                if isinstance(e, dict):
+                    confs.append(str(round(e.get('confidence', 0.0), 4)))
+                else:
+                    confs.append('')
+            return confs
+
+        entity_cols = {
+            'conceitos_cientificos': 'conceito_cientifico',
+            'campos_semanticos': 'campo_semantico',
+            'campos_lexicais': 'campo_lexical',
+            'processos_fenomenos': 'processo_fenomeno',
+            'contextos_historicos': 'contexto_historico',
+            'habilidades_compostas': 'habilidade_composta',
+        }
+
+        # Add extracted fields and their real confidence scores
+        for col_name, entity_key in entity_cols.items():
+            df[col_name] = [
+                ', '.join(_extract_texts(r.get('entities', {}).get(entity_key, []))) if r else ''
+                for r in extraction_results
+            ]
+            df[f'{col_name}_confidence'] = [
+                ', '.join(_extract_confidences(r.get('entities', {}).get(entity_key, []))) if r else ''
+                for r in extraction_results
+            ]
 
         # Also store all entities combined for search
         df['all_entities'] = [
             ', '.join([
-                item for entities in r.get('entities', {}).values()
-                for item in (entities if isinstance(entities, list) else [])
+                text for entities in r.get('entities', {}).values()
+                for e in (entities if isinstance(entities, list) else [])
+                for text in [e.get('text', e) if isinstance(e, dict) else e]
             ]) if r else ''
             for r in extraction_results
         ]
