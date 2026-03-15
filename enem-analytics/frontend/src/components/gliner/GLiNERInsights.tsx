@@ -535,7 +535,7 @@ function NetworkTab({
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
 
   // Node limit and visibility controls
-  const [maxNodes, setMaxNodes] = useState(60);
+  const [maxNodes, setMaxNodes] = useState(150);
   const [showAllLabels, setShowAllLabels] = useState(false);
   const labelThreshold = 5; // Only show labels for nodes with count >= this
 
@@ -945,7 +945,7 @@ function NetworkTab({
           <input
             type="range"
             min={20}
-            max={150}
+            max={300}
             step={10}
             value={maxNodes}
             onChange={(e) => setMaxNodes(Number(e.target.value))}
