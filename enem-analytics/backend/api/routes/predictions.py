@@ -119,7 +119,10 @@ async def get_top_potential_improvers(
                     'nota_prevista': pred['prediction'],
                     'melhoria_esperada': improvement
                 })
-        except:
+        except (ValueError, IndexError, KeyError):
+            continue
+        except Exception as e:
+            print(f"Unexpected error predicting {codigo_inep}: {e}")
             continue
 
     # Sort by improvement potential
@@ -259,8 +262,11 @@ async def get_tri_based_prediction_analysis(codigo_inep: str):
     # Get predictions
     try:
         predictions = model.predict_all_scores(codigo_inep)
-    except:
-        predictions = {'scores': {}}
+    except ValueError:
+        predictions = {'scores': {}, 'error': 'Dados insuficientes para prediction'}
+    except Exception as e:
+        print(f"Prediction error for {codigo_inep}: {e}")
+        predictions = {'scores': {}, 'error': str(e)}
 
     # Build area analysis
     area_analysis = []
