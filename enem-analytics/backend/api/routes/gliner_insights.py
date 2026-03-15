@@ -890,6 +890,9 @@ async def get_study_focus(codigo_inep: str) -> Dict[str, Any]:
             info = concept_info[concept]
             avg_tri = sum(info['tri_scores']) / len(info['tri_scores']) if info['tri_scores'] else 0
 
+            # Relevance based on real data: frequency in TRI content
+            relevance_score = round(count / max(1, sum(concepts.values())) * 100, 1)
+
             study_sequence.append({
                 'concept': concept,
                 'frequency': count,
@@ -898,11 +901,14 @@ async def get_study_focus(codigo_inep: str) -> Dict[str, Any]:
                 'lexical_fields': list(info['lexical_fields'])[:2],
                 'related_processes': list(info['processes'])[:2],
                 'priority': 'high' if count >= 5 else 'medium' if count >= 3 else 'low',
-                'estimated_impact': round(min(15, count * 2), 0)  # Points gained
+                'relevance': relevance_score,
+                'estimated_impact': count,  # Number of TRI items covering this concept
             })
 
         # Sort by difficulty (easier first)
         study_sequence.sort(key=lambda x: x['avg_difficulty'])
+
+        total_items_covered = sum(s['estimated_impact'] for s in study_sequence)
 
         focus_areas.append({
             'area': area_code,
@@ -913,7 +919,7 @@ async def get_study_focus(codigo_inep: str) -> Dict[str, Any]:
             'level': level,
             'study_sequence': study_sequence,
             'total_concepts': len(concepts),
-            'estimated_total_impact': sum(s['estimated_impact'] for s in study_sequence)
+            'estimated_total_impact': total_items_covered,  # Total TRI items covered
         })
 
     return {

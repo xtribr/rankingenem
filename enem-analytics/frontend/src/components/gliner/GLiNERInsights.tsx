@@ -383,8 +383,8 @@ function StudyFocusTab({
       <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl p-4 text-white">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm opacity-90">Potencial de Melhoria Estimado</p>
-            <p className="text-3xl font-bold">+{studyFocus.total_estimated_improvement} pts</p>
+            <p className="text-sm opacity-90">Itens TRI Cobertos</p>
+            <p className="text-3xl font-bold">{studyFocus.total_estimated_improvement} itens</p>
           </div>
           <div className="text-right">
             <p className="text-sm opacity-90">Áreas em Foco</p>
@@ -443,9 +443,9 @@ function StudyFocusTab({
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-xs text-gray-500">Impacto Estimado</p>
+                <p className="text-xs text-gray-500">Itens TRI</p>
                 <p className="text-xl font-bold text-green-600">
-                  +{area.estimated_total_impact} pts
+                  {area.estimated_total_impact} itens
                 </p>
               </div>
             </div>
@@ -484,8 +484,8 @@ function StudyFocusTab({
                           {concept.concept}
                         </span>
                       </div>
-                      <span className="text-[10px] text-green-600 font-medium">
-                        +{concept.estimated_impact}
+                      <span className="text-[10px] text-blue-600 font-medium">
+                        {concept.estimated_impact}x
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-[10px] text-gray-500 ml-7">
