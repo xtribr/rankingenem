@@ -338,6 +338,25 @@ class RecommendationEngine:
         # Sort by priority
         recommendations.sort(key=lambda x: x['priority'], reverse=True)
 
+        # Check if we have any data to recommend on
+        if not recommendations:
+            return {
+                'codigo_inep': codigo_inep,
+                'school_info': school_info,
+                'error': 'Dados insuficientes para gerar recomendações. A escola não possui notas registradas.',
+                'all_recommendations': [],
+                'high_priority_recommendations': [],
+                'quick_wins': [],
+                'long_term_priorities': [],
+                'success_stories': [],
+                'summary': {
+                    'total_recommendations': 0,
+                    'high_priority_count': 0,
+                    'quick_wins_count': 0,
+                    'success_stories_count': 0
+                }
+            }
+
         # Categorize recommendations
         quick_wins = [r for r in recommendations if r['difficulty'] == 'low' and r['expected_gain'] > 0]
         high_priority = [r for r in recommendations if r['priority'] >= 0.7]

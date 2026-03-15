@@ -219,6 +219,15 @@ class DiagnosisEngine:
         area_analysis.sort(key=lambda x: x['priority_score'], reverse=True)
 
         # Overall assessment
+        if not area_analysis:
+            return {
+                'codigo_inep': codigo_inep,
+                'error': 'Dados insuficientes para diagnóstico. A escola não possui notas registradas.',
+                'overall_health': 'insufficient_data',
+                'area_analysis': [],
+                'skill_gaps': [],
+            }
+
         avg_z = np.mean([a['z_score'] for a in area_analysis])
         critical_count = len([a for a in area_analysis if a['status'] == 'critical'])
         excellent_count = len([a for a in area_analysis if a['status'] == 'excellent'])
