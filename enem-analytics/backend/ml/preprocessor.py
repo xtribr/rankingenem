@@ -6,7 +6,13 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple, Optional
 from pathlib import Path
-import os
+
+from data.year_resolver import (
+    find_latest_enem_results_file,
+    find_latest_school_skills_file,
+    find_latest_skills_file,
+    get_latest_year_from_df,
+)
 
 class ENEMPreprocessor:
     """Preprocessor for ENEM school data - creates features for ML models"""
@@ -28,19 +34,21 @@ class ENEMPreprocessor:
     def _load_data(self):
         """Load all required datasets"""
         # Main ENEM data
-        enem_file = self.data_path / "enem_2018_2024_completo.csv"
+        enem_file = find_latest_enem_results_file(self.data_path)
+        if enem_file is None:
+            raise FileNotFoundError("No consolidated ENEM dataset found in backend/data")
         self.df = pd.read_csv(enem_file, dtype={'codigo_inep': str})
         print(f"Loaded {len(self.df)} ENEM records")
 
         # National skills data
-        skills_file = self.data_path / "habilidades_2024.csv"
-        if skills_file.exists():
+        skills_file = find_latest_skills_file(self.data_path)
+        if skills_file and skills_file.exists():
             self.skills_df = pd.read_csv(skills_file)
             print(f"Loaded {len(self.skills_df)} skill records")
 
         # School-level skills data
-        school_skills_file = self.data_path / "desempenho_habilidades_2024.csv"
-        if school_skills_file.exists():
+        school_skills_file = find_latest_school_skills_file(self.data_path)
+        if school_skills_file and school_skills_file.exists():
             self.school_skills_df = pd.read_csv(school_skills_file)
             print(f"Loaded {len(self.school_skills_df)} school skill records")
 
@@ -588,7 +596,7 @@ class ENEMPreprocessor:
         Prepare training data using ALL temporal pairs.
 
         Instead of only ≤2022→2023, uses every possible year pair:
-          ≤2019→2020, ≤2020→2021, ≤2021→2022, ≤2022→2023, ≤2023→2024
+          Uses every rolling train/target pair available in the loaded dataset
 
         This captures the full trajectory of each school and teaches the model
         that consistent top performers stay at the top.
@@ -651,18 +659,22 @@ class ENEMPreprocessor:
 
         return pd.DataFrame(correlations)
 
-    def get_peer_schools(self, codigo_inep: str, year: int = 2024) -> pd.DataFrame:
+    def get_peer_schools(self, codigo_inep: str, year: Optional[int] = None) -> pd.DataFrame:
         """
         Get peer schools (same porte, tipo_escola) for comparison
 
         Args:
             codigo_inep: Target school INEP code
-            year: Year for comparison
+            year: Year for comparison. Defaults to the latest available year.
 
         Returns:
             DataFrame of peer schools
         """
-        school_data = self.df[(self.df['codigo_inep'] == codigo_inep) & (self.df['ano'] == year)]
+        comparison_year = year or get_latest_year_from_df(self.df)
+        if comparison_year is None:
+            return pd.DataFrame()
+
+        school_data = self.df[(self.df['codigo_inep'] == codigo_inep) & (self.df['ano'] == comparison_year)]
 
         if len(school_data) == 0:
             return pd.DataFrame()
@@ -673,7 +685,7 @@ class ENEMPreprocessor:
 
         # Find peers
         peers = self.df[
-            (self.df['ano'] == year) &
+            (self.df['ano'] == comparison_year) &
             (self.df['porte'] == porte) &
             (self.df['tipo_escola'] == tipo) &
             (self.df['codigo_inep'] != codigo_inep)
@@ -681,13 +693,13 @@ class ENEMPreprocessor:
 
         return peers
 
-    def get_top_peers(self, codigo_inep: str, year: int = 2024, percentile: float = 0.8) -> pd.DataFrame:
+    def get_top_peers(self, codigo_inep: str, year: Optional[int] = None, percentile: float = 0.8) -> pd.DataFrame:
         """
         Get top performing peer schools as benchmark
 
         Args:
             codigo_inep: Target school INEP code
-            year: Year for comparison
+            year: Year for comparison. Defaults to the latest available year.
             percentile: Top percentile to consider (0.8 = top 20%)
 
         Returns:

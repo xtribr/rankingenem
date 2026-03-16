@@ -1,16 +1,14 @@
-"""
-School endpoints for ENEM Analytics API
-Uses DuckDB for fast analytical queries (10-100x faster than Pandas)
-"""
+"""School endpoints for ENEM Analytics API."""
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from typing import Optional, List, Dict
+from pathlib import Path
 from pydantic import BaseModel
 import pandas as pd
-import os
 
 from api.auth.authorization import get_authorized_school_user
 from api.auth.supabase_dependencies import UserProfile, get_current_admin
+from data.year_resolver import find_latest_skills_file, get_file_year
 
 # Supabase-based data layer
 from data.supabase_store import (
@@ -25,6 +23,7 @@ router = APIRouter()
 
 # Cache for skills data
 _skills_df = None
+_skills_year = None
 
 # Skill descriptions (used for enriching data)
 SKILL_DESCRIPTIONS = {
@@ -161,12 +160,21 @@ SKILL_DESCRIPTIONS = {
 
 def get_skills_df():
     """Load skills data from CSV"""
-    global _skills_df
+    global _skills_df, _skills_year
     if _skills_df is None:
-        skills_path = os.path.join(os.path.dirname(__file__), "..", "..", "data", "habilidades_2024.csv")
-        if os.path.exists(skills_path):
+        data_dir = Path(__file__).resolve().parents[2] / "data"
+        skills_path = find_latest_skills_file(data_dir)
+        if skills_path and skills_path.exists():
             _skills_df = pd.read_csv(skills_path)
+            _skills_year = get_file_year(skills_path)
     return _skills_df
+
+
+def get_skills_year() -> Optional[int]:
+    """Return the year represented by the cached national skills file."""
+    if _skills_df is None:
+        get_skills_df()
+    return _skills_year
 
 
 def fetch_school_skills_from_supabase(codigo_inep: str, ano: Optional[int] = None) -> List[Dict]:
@@ -200,7 +208,7 @@ def fetch_school_skills_from_supabase(codigo_inep: str, ano: Optional[int] = Non
                 "skill_num": row["skill_num"],
                 "performance": float(row["performance"]),
                 "descricao": row.get("descricao") or SKILL_DESCRIPTIONS.get(row["area"], {}).get(row["skill_num"], f"Habilidade {row['skill_num']}"),
-                "ano": row.get("ano", 2024)
+                "ano": row.get("ano") or get_skills_year()
             })
 
         return records
@@ -217,9 +225,13 @@ def get_available_years() -> List[int]:
     try:
         result = supabase.table("school_skills").select("ano").limit(1000).execute()
         anos = sorted(set(r["ano"] for r in result.data), reverse=True)
-        return anos if anos else [2024]
+        if anos:
+            return anos
     except Exception:
-        return [2024]
+        pass
+
+    fallback_year = get_skills_year()
+    return [fallback_year] if fallback_year is not None else []
 
 
 class SchoolScore(BaseModel):
@@ -558,7 +570,7 @@ async def get_worst_skills(
         ]
 
     return {
-        "ano": 2024,
+        "ano": get_skills_year(),
         "skills_by_area": result
     }
 
@@ -588,7 +600,7 @@ async def get_all_skills(
         })
 
     return {
-        "ano": 2024,
+        "ano": get_skills_year(),
         "total": len(result),
         "skills": result
     }
@@ -605,7 +617,7 @@ async def get_school_skills(
     Get skill performance for a specific school.
     Returns the worst performing skills compared to national average.
 
-    - **ano**: Year of data (2024, 2025, etc.). If not specified, returns latest available.
+    - **ano**: Year of data. If not specified, returns the latest available cycle.
     """
     # Fetch school-specific skills from Supabase (local database)
     school_skills = fetch_school_skills_from_supabase(codigo_inep, ano=ano)
@@ -674,12 +686,17 @@ async def get_school_skills(
         })
 
     # Get actual year from data (in case ano was not specified)
-    actual_ano = school_skills[0].get("ano", 2024) if school_skills else (ano or 2024)
+    available_years = get_available_years()
+    actual_ano = (
+        school_skills[0].get("ano")
+        if school_skills and school_skills[0].get("ano") is not None
+        else ano or (available_years[0] if available_years else get_skills_year())
+    )
 
     return {
         "codigo_inep": codigo_inep,
         "ano": actual_ano,
-        "available_years": get_available_years(),
+        "available_years": available_years,
         "total_skills": len(school_skills),
         "worst_overall": worst_overall,
         "by_area": skills_by_area

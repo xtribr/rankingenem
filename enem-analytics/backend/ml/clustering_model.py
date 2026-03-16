@@ -12,6 +12,12 @@ from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import silhouette_score
 
+from data.year_resolver import (
+    find_latest_enem_results_file,
+    get_latest_year_from_df,
+    get_previous_year_from_df,
+)
+
 
 class SchoolClusteringModel:
     """K-Means clustering for school personas based on TRI scores"""
@@ -77,20 +83,20 @@ class SchoolClusteringModel:
 
     def _load_data(self) -> pd.DataFrame:
         """Load ENEM data"""
-        data_path = self.model_dir.parent / "data" / "enem_2018_2024_completo.csv"
-        if not data_path.exists():
+        data_path = find_latest_enem_results_file(self.model_dir.parent / "data")
+        if data_path is None or not data_path.exists():
             return pd.DataFrame()
 
         df = pd.read_csv(data_path)
         df['codigo_inep'] = df['codigo_inep'].astype(str)
         return df
 
-    def train(self, year: int = 2024) -> Dict:
+    def train(self, year: Optional[int] = None) -> Dict:
         """
         Train K-Means clustering model
 
         Args:
-            year: Year to use for training
+            year: Year to use for training. Defaults to the latest available cycle.
 
         Returns:
             Training metrics
@@ -99,8 +105,12 @@ class SchoolClusteringModel:
         if len(self.df) == 0:
             return {'error': 'No data available'}
 
+        training_year = year or get_latest_year_from_df(self.df)
+        if training_year is None:
+            return {'error': 'No valid ENEM year found in dataset'}
+
         # Filter to specified year
-        df_year = self.df[self.df['ano'] == year].copy()
+        df_year = self.df[self.df['ano'] == training_year].copy()
 
         # Get feature matrix
         X = df_year[self.feature_cols].dropna()
@@ -158,6 +168,7 @@ class SchoolClusteringModel:
         }, model_path)
 
         return {
+            'year': training_year,
             'n_clusters': self.n_clusters,
             'n_samples': len(X),
             'silhouette_score': round(silhouette, 3),
@@ -315,15 +326,18 @@ class SchoolClusteringModel:
         if self.df is None:
             self.df = self._load_data()
 
-        # Get 2024 data
-        df_2024 = self.df[self.df['ano'] == 2024].copy()
+        latest_year = get_latest_year_from_df(self.df)
+        if latest_year is None:
+            return []
+
+        df_latest = self.df[self.df['ano'] == latest_year].copy()
 
         # Get school features
         school_scores = np.array([cluster_info['scores'][col] for col in self.feature_cols])
 
         # Calculate distances to all schools
         distances = []
-        for _, row in df_2024.iterrows():
+        for _, row in df_latest.iterrows():
             if row['codigo_inep'] == codigo_inep:
                 continue
 
@@ -381,6 +395,11 @@ class SchoolClusteringModel:
         # Get school features
         school_scores = np.array([cluster_info['scores'][col] for col in self.feature_cols])
 
+        latest_year = get_latest_year_from_df(self.df)
+        previous_year = get_previous_year_from_df(self.df, latest_year)
+        if latest_year is None or previous_year is None:
+            return []
+
         # Find schools with improvement
         improved_schools = []
 
@@ -394,27 +413,27 @@ class SchoolClusteringModel:
 
             group = group.sort_values('ano')
 
-            # Need at least 2023 and 2024 data
-            if 2024 not in group['ano'].values or 2023 not in group['ano'].values:
+            # Need both the latest available year and the previous year.
+            if latest_year not in group['ano'].values or previous_year not in group['ano'].values:
                 continue
 
-            data_2023 = group[group['ano'] == 2023].iloc[0]
-            data_2024 = group[group['ano'] == 2024].iloc[0]
+            data_previous = group[group['ano'] == previous_year].iloc[0]
+            data_latest = group[group['ano'] == latest_year].iloc[0]
 
-            if pd.isna(data_2023['nota_media']) or pd.isna(data_2024['nota_media']):
+            if pd.isna(data_previous['nota_media']) or pd.isna(data_latest['nota_media']):
                 continue
 
-            improvement = data_2024['nota_media'] - data_2023['nota_media']
+            improvement = data_latest['nota_media'] - data_previous['nota_media']
 
             if improvement < min_improvement:
                 continue
 
             # Check similarity (using 2023 scores for comparison)
-            if any(pd.isna(data_2023[col]) for col in self.feature_cols):
+            if any(pd.isna(data_previous[col]) for col in self.feature_cols):
                 continue
 
-            other_scores_2023 = np.array([data_2023[col] for col in self.feature_cols])
-            dist = np.sqrt(np.sum((school_scores - other_scores_2023) ** 2))
+            other_scores_previous = np.array([data_previous[col] for col in self.feature_cols])
+            dist = np.sqrt(np.sum((school_scores - other_scores_previous) ** 2))
 
             # Only include reasonably similar schools
             if dist > 150:  # Max distance threshold
@@ -422,13 +441,17 @@ class SchoolClusteringModel:
 
             improved_schools.append({
                 'codigo_inep': inep,
-                'nome_escola': data_2024.get('nome_escola', 'Unknown'),
+                'nome_escola': data_latest.get('nome_escola', 'Unknown'),
                 'similarity_distance': round(float(dist), 1),
                 'improvement': round(float(improvement), 1),
-                'scores_2023': {col: round(float(data_2023[col]), 1) for col in self.feature_cols},
-                'scores_2024': {col: round(float(data_2024[col]), 1) for col in self.feature_cols},
-                'tipo_escola': data_2024.get('tipo_escola'),
-                'porte': data_2024.get('porte')
+                'comparison_years': {
+                    'previous': previous_year,
+                    'current': latest_year,
+                },
+                'scores_previous': {col: round(float(data_previous[col]), 1) for col in self.feature_cols},
+                'scores_current': {col: round(float(data_latest[col]), 1) for col in self.feature_cols},
+                'tipo_escola': data_latest.get('tipo_escola'),
+                'porte': data_latest.get('porte')
             })
 
         # Sort by improvement
@@ -445,7 +468,11 @@ class SchoolClusteringModel:
         if self.df is None:
             self.df = self._load_data()
 
-        df_2024 = self.df[self.df['ano'] == 2024]
+        latest_year = get_latest_year_from_df(self.df)
+        if latest_year is None:
+            return []
+
+        df_latest = self.df[self.df['ano'] == latest_year]
 
         summaries = []
         for i in range(self.n_clusters):

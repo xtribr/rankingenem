@@ -1,6 +1,4 @@
-"""
-Rotas do Oráculo ENEM - Predições para 2026
-"""
+"""Rotas do Oráculo ENEM."""
 
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Optional, List
@@ -8,19 +6,18 @@ import json
 from pathlib import Path
 
 from api.auth.supabase_dependencies import UserProfile, get_current_admin
+from data.year_resolver import find_latest_oracle_predictions_file
 
 router = APIRouter(prefix="/api/oracle", tags=["oracle"])
 
-# Load predictions from file (relative to backend/data/)
-PREDICTIONS_FILE = Path(__file__).parent.parent.parent / "data" / "predictions_2026.json"
-
-
 def load_predictions():
     """Load predictions from JSON file."""
-    if not PREDICTIONS_FILE.exists():
+    data_dir = Path(__file__).parent.parent.parent / "data"
+    predictions_file = find_latest_oracle_predictions_file(data_dir)
+    if predictions_file is None or not predictions_file.exists():
         return None
 
-    with open(PREDICTIONS_FILE, 'r', encoding='utf-8') as f:
+    with open(predictions_file, 'r', encoding='utf-8') as f:
         return json.load(f)
 
 
@@ -32,7 +29,7 @@ async def get_all_predictions(
     _: UserProfile = Depends(get_current_admin),
 ):
     """
-    Retorna todas as predições do Oráculo para ENEM 2026.
+    Retorna todas as predições do Oráculo para o último ciclo publicado.
 
     Args:
         limit: Limitar número de resultados

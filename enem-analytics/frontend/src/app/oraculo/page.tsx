@@ -74,6 +74,13 @@ export default function OraculoPage() {
       }),
   });
 
+  const predictionYear = data?.ano_predicao;
+  const historicalRangeLabel = predictionYear ? `2009-${predictionYear - 1}` : '2009-atual';
+  const methodologyDescription =
+    data?.metodologia?.descricao ??
+    `Predições baseadas em análise estatística de frequência histórica de temas no ENEM (${historicalRangeLabel}).`;
+  const dataSourceLabel = data?.metodologia?.fonte_dados ?? 'CSV TRI oficial';
+
   const getProbabilityColor = (prob: number) => {
     if (prob >= 0.3) return 'text-green-600 bg-green-50';
     if (prob >= 0.1) return 'text-blue-600 bg-blue-50';
@@ -112,7 +119,9 @@ export default function OraculoPage() {
                 <Sparkles className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-slate-900">Oráculo ENEM 2026</h1>
+                <h1 className="text-2xl font-bold text-slate-900">
+                  {predictionYear ? `Oráculo ENEM ${predictionYear}` : 'Oráculo ENEM'}
+                </h1>
                 <p className="text-sm text-slate-500">
                   Análise estatística de {data?.total || '...'} campos semânticos (2.600 questões históricas)
                 </p>
@@ -136,8 +145,7 @@ export default function OraculoPage() {
             <div>
               <h2 className="font-semibold text-lg mb-2">Metodologia Científica</h2>
               <p className="text-indigo-100 text-sm mb-3">
-                As predições são baseadas em <strong>análise estatística de frequência histórica</strong> de 2.600 questões
-                do ENEM (2009-2025). Cada probabilidade representa a frequência real com que o tema apareceu nas provas anteriores.
+                {methodologyDescription}
               </p>
               <div className="flex flex-wrap gap-3 text-xs">
                 <span className="px-2 py-1 bg-white/20 rounded flex items-center gap-1">
@@ -147,7 +155,7 @@ export default function OraculoPage() {
                   <FileText className="h-3 w-3" /> 2.600 questões analisadas
                 </span>
                 <span className="px-2 py-1 bg-white/20 rounded flex items-center gap-1">
-                  <Database className="h-3 w-3" /> Fonte: CSV TRI oficial
+                  <Database className="h-3 w-3" /> Fonte: {dataSourceLabel}
                 </span>
               </div>
             </div>

@@ -878,8 +878,12 @@ export const api = {
         nome_escola: string;
         similarity_distance: number;
         improvement: number;
-        scores_2023: Record<string, number>;
-        scores_2024: Record<string, number>;
+        comparison_years: {
+          previous: number | null;
+          current: number;
+        };
+        scores_previous: Record<string, number>;
+        scores_current: Record<string, number>;
         tipo_escola: string | null;
         porte: number | null;
       }[];

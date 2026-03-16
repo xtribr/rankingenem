@@ -12,6 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from ml.clustering_model import SchoolClusteringModel
+from data.year_resolver import get_latest_year_from_df, get_previous_year_from_df
 from api.auth.authorization import get_authorized_school_user
 from api.auth.supabase_dependencies import UserProfile, get_current_admin
 
@@ -138,8 +139,8 @@ async def get_similar_improved_schools(
     Find similar schools that improved significantly
 
     These are schools that:
-    - Had similar scores to the target school in 2023
-    - Improved by at least min_improvement points in 2024
+    - Had similar scores to the target school in the previous cycle
+    - Improved by at least min_improvement points in the latest cycle
 
     Args:
         codigo_inep: School INEP code
@@ -162,7 +163,7 @@ async def get_similar_improved_schools(
         'codigo_inep': codigo_inep,
         'school_cluster': school_cluster,
         'improved_similar_schools': improved,
-        'insight': f'Schools similar to yours that improved by {min_improvement}+ points'
+        'insight': f'Schools similar to yours that improved by {min_improvement}+ points in the latest cycle'
     }
 
 
@@ -185,10 +186,15 @@ async def get_cluster_stats(
     summary = model.get_cluster_summary()
 
     # Calculate sizes
-    df_2024 = model.df[model.df['ano'] == 2024]
+    latest_year = get_latest_year_from_df(model.df)
+    previous_year = get_previous_year_from_df(model.df, latest_year)
+    if latest_year is None:
+        raise HTTPException(status_code=500, detail="No ENEM cycle available for clustering stats")
+
+    df_latest = model.df[model.df['ano'] == latest_year]
     cluster_sizes = {}
 
-    for _, row in df_2024.iterrows():
+    for _, row in df_latest.iterrows():
         cluster_info = model.predict_cluster(row['codigo_inep'])
         if cluster_info:
             cluster = cluster_info['cluster']
@@ -199,6 +205,8 @@ async def get_cluster_stats(
         s['size'] = cluster_sizes.get(s['cluster'], 0)
 
     return {
+        'year': latest_year,
+        'comparison_years': {'previous': previous_year, 'current': latest_year},
         'n_clusters': model.n_clusters,
         'cluster_summary': summary,
         'total_schools': sum(cluster_sizes.values())

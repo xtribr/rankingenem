@@ -61,7 +61,7 @@ const adminMenuItems = [
   },
   { 
     icon: Sparkles, 
-    label: 'Oráculo 2026', 
+    label: 'Oráculo', 
     href: '/oraculo',
     badge: { text: 'Novo', color: 'bg-amber-500' }
   },

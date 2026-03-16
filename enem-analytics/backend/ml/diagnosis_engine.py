@@ -8,6 +8,12 @@ import numpy as np
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from data.year_resolver import (
+    find_latest_enem_results_file,
+    find_latest_skills_file,
+    get_latest_year_from_df,
+)
+
 
 class DiagnosisEngine:
     """Engine for diagnosing school performance gaps and priorities"""
@@ -40,14 +46,15 @@ class DiagnosisEngine:
 
         # Load school data
         self.df = self._load_school_data()
+        self.latest_year = get_latest_year_from_df(self.df)
 
         # Compute area statistics
         self.area_stats = self._compute_area_stats()
 
     def _load_skill_averages(self) -> Dict[str, float]:
-        """Load national skill averages from habilidades_2024.csv"""
-        path = self.data_dir / "habilidades_2024.csv"
-        if not path.exists():
+        """Load national skill averages from the latest available skills file."""
+        path = find_latest_skills_file(self.data_dir)
+        if path is None or not path.exists():
             return {}
 
         df = pd.read_csv(path)
@@ -62,8 +69,8 @@ class DiagnosisEngine:
 
     def _load_school_data(self) -> pd.DataFrame:
         """Load ENEM school data"""
-        path = self.data_dir / "enem_2018_2024_completo.csv"
-        if not path.exists():
+        path = find_latest_enem_results_file(self.data_dir)
+        if path is None or not path.exists():
             return pd.DataFrame()
 
         df = pd.read_csv(path)
@@ -72,15 +79,15 @@ class DiagnosisEngine:
 
     def _compute_area_stats(self) -> Dict[str, Dict]:
         """Compute statistics for each area"""
-        if len(self.df) == 0:
+        if len(self.df) == 0 or self.latest_year is None:
             return {}
 
-        df_2024 = self.df[self.df['ano'] == 2024]
+        df_latest = self.df[self.df['ano'] == self.latest_year]
 
         stats = {}
         for area, col in self.AREA_TO_TRI.items():
-            if col in df_2024.columns:
-                values = df_2024[col].dropna()
+            if col in df_latest.columns:
+                values = df_latest[col].dropna()
                 stats[area] = {
                     'mean': values.mean(),
                     'std': values.std(),
@@ -118,8 +125,12 @@ class DiagnosisEngine:
         if not porte:
             return self.area_stats
 
-        df_2024 = self.df[self.df['ano'] == 2024]
-        peers = df_2024[df_2024['porte'] == porte]
+        analysis_year = school_info.get('ano') or self.latest_year
+        if analysis_year is None:
+            return self.area_stats
+
+        df_latest = self.df[self.df['ano'] == analysis_year]
+        peers = df_latest[df_latest['porte'] == porte]
 
         if len(peers) < 30:
             return self.area_stats

@@ -9,6 +9,13 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
+from data.year_resolver import (
+    find_latest_enem_results_file,
+    find_latest_skills_file,
+    get_latest_year_from_df,
+    get_previous_year_from_df,
+)
+
 
 @dataclass
 class Recommendation:
@@ -58,6 +65,8 @@ class RecommendationEngine:
         # Load data
         self.df = self._load_school_data()
         self.skill_averages = self._load_skill_averages()
+        self.latest_year = get_latest_year_from_df(self.df)
+        self.previous_year = get_previous_year_from_df(self.df, self.latest_year)
 
         # Precompute statistics
         self.area_stats = self._compute_area_stats()
@@ -65,8 +74,8 @@ class RecommendationEngine:
 
     def _load_school_data(self) -> pd.DataFrame:
         """Load ENEM school data"""
-        path = self.data_dir / "enem_2018_2024_completo.csv"
-        if not path.exists():
+        path = find_latest_enem_results_file(self.data_dir)
+        if path is None or not path.exists():
             return pd.DataFrame()
 
         df = pd.read_csv(path)
@@ -75,8 +84,8 @@ class RecommendationEngine:
 
     def _load_skill_averages(self) -> Dict[str, float]:
         """Load national skill averages"""
-        path = self.data_dir / "habilidades_2024.csv"
-        if not path.exists():
+        path = find_latest_skills_file(self.data_dir)
+        if path is None or not path.exists():
             return {}
 
         df = pd.read_csv(path)
@@ -88,15 +97,15 @@ class RecommendationEngine:
 
     def _compute_area_stats(self) -> Dict[str, Dict]:
         """Compute statistics by area"""
-        if len(self.df) == 0:
+        if len(self.df) == 0 or self.latest_year is None:
             return {}
 
-        df_2024 = self.df[self.df['ano'] == 2024]
+        df_latest = self.df[self.df['ano'] == self.latest_year]
         stats = {}
 
         for area, col in self.AREA_TO_TRI.items():
-            if col in df_2024.columns:
-                values = df_2024[col].dropna()
+            if col in df_latest.columns:
+                values = df_latest[col].dropna()
                 stats[area] = {
                     'mean': values.mean(),
                     'std': values.std(),
@@ -109,7 +118,7 @@ class RecommendationEngine:
 
     def _analyze_improvement_patterns(self) -> Dict:
         """Analyze how schools improved between years"""
-        if len(self.df) == 0:
+        if len(self.df) == 0 or self.latest_year is None or self.previous_year is None:
             return {}
 
         patterns = {
@@ -118,30 +127,31 @@ class RecommendationEngine:
             'improvement_correlations': {}
         }
 
-        # Calculate improvements between 2023 and 2024
-        schools_2023 = self.df[self.df['ano'] == 2023].set_index('codigo_inep')
-        schools_2024 = self.df[self.df['ano'] == 2024].set_index('codigo_inep')
+        schools_previous = self.df[self.df['ano'] == self.previous_year].set_index('codigo_inep')
+        schools_latest = self.df[self.df['ano'] == self.latest_year].set_index('codigo_inep')
 
-        common_schools = schools_2023.index.intersection(schools_2024.index)
+        common_schools = schools_previous.index.intersection(schools_latest.index)
 
         if len(common_schools) < 100:
             return patterns
 
         for area, col in self.AREA_TO_TRI.items():
-            if col not in schools_2023.columns:
+            if col not in schools_previous.columns:
                 continue
 
             improvements = []
             for school in common_schools:
-                score_2023 = schools_2023.loc[school, col]
-                score_2024 = schools_2024.loc[school, col]
+                score_previous = schools_previous.loc[school, col]
+                score_latest = schools_latest.loc[school, col]
 
-                if pd.notna(score_2023) and pd.notna(score_2024):
+                if pd.notna(score_previous) and pd.notna(score_latest):
                     improvements.append({
                         'school': school,
-                        'score_2023': score_2023,
-                        'score_2024': score_2024,
-                        'improvement': score_2024 - score_2023
+                        'score_previous': score_previous,
+                        'score_current': score_latest,
+                        'previous_year': self.previous_year,
+                        'current_year': self.latest_year,
+                        'improvement': score_latest - score_previous
                     })
 
             if improvements:
@@ -197,29 +207,32 @@ class RecommendationEngine:
         # Find similar schools that improved
         improved_schools = []
 
-        schools_2023 = self.df[self.df['ano'] == 2023].set_index('codigo_inep')
-        schools_2024 = self.df[self.df['ano'] == 2024].set_index('codigo_inep')
+        if self.latest_year is None or self.previous_year is None:
+            return []
 
-        for school_id in schools_2023.index.intersection(schools_2024.index):
+        schools_previous = self.df[self.df['ano'] == self.previous_year].set_index('codigo_inep')
+        schools_latest = self.df[self.df['ano'] == self.latest_year].set_index('codigo_inep')
+
+        for school_id in schools_previous.index.intersection(schools_latest.index):
             if school_id == codigo_inep:
                 continue
 
-            data_2023 = schools_2023.loc[school_id]
-            data_2024 = schools_2024.loc[school_id]
+            data_previous = schools_previous.loc[school_id]
+            data_latest = schools_latest.loc[school_id]
 
             # Calculate improvement
-            if pd.isna(data_2023.get('nota_media')) or pd.isna(data_2024.get('nota_media')):
+            if pd.isna(data_previous.get('nota_media')) or pd.isna(data_latest.get('nota_media')):
                 continue
 
-            improvement = data_2024['nota_media'] - data_2023['nota_media']
+            improvement = data_latest['nota_media'] - data_previous['nota_media']
             if improvement < min_improvement:
                 continue
 
-            # Calculate similarity (using 2023 scores compared to current school)
+            # Calculate similarity using the previous cycle as the comparison anchor.
             distance = 0
             for area, col in self.AREA_TO_TRI.items():
-                if pd.notna(school_scores.get(area)) and pd.notna(data_2023.get(col)):
-                    distance += (school_scores[area] - data_2023[col]) ** 2
+                if pd.notna(school_scores.get(area)) and pd.notna(data_previous.get(col)):
+                    distance += (school_scores[area] - data_previous[col]) ** 2
             distance = np.sqrt(distance)
 
             if distance > max_distance:
@@ -228,11 +241,11 @@ class RecommendationEngine:
             # Calculate score changes by area
             area_changes = {}
             for area, col in self.AREA_TO_TRI.items():
-                if pd.notna(data_2023.get(col)) and pd.notna(data_2024.get(col)):
+                if pd.notna(data_previous.get(col)) and pd.notna(data_latest.get(col)):
                     area_changes[area] = {
-                        'before': round(float(data_2023[col]), 1),
-                        'after': round(float(data_2024[col]), 1),
-                        'change': round(float(data_2024[col] - data_2023[col]), 1)
+                        'before': round(float(data_previous[col]), 1),
+                        'after': round(float(data_latest[col]), 1),
+                        'change': round(float(data_latest[col] - data_previous[col]), 1)
                     }
 
             # Normalize similarity: 100% = identical, 0% = very different
@@ -242,12 +255,16 @@ class RecommendationEngine:
 
             improved_schools.append({
                 'codigo_inep': school_id,
-                'nome_escola': data_2024.get('nome_escola', 'Unknown'),
+                'nome_escola': data_latest.get('nome_escola', 'Unknown'),
                 'similarity_score': round(float(similarity), 1),
                 'improvement': round(float(improvement), 1),
                 'area_changes': area_changes,
-                'tipo_escola': data_2024.get('tipo_escola'),
-                'porte': data_2024.get('porte')
+                'tipo_escola': data_latest.get('tipo_escola'),
+                'porte': data_latest.get('porte'),
+                'comparison_years': {
+                    'previous': self.previous_year,
+                    'current': self.latest_year,
+                },
             })
 
         # Sort by improvement
