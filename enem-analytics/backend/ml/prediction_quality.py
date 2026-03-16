@@ -26,8 +26,10 @@ AREA_SCORE_COLUMNS = {
 }
 
 RISK_BADGES = {
+    "stability": "Estabilidade histórica",
     "conservative": "Projeção conservadora",
     "outlier": "Fora da faixa histórica",
+    "sparse": "Histórico insuficiente",
 }
 
 
@@ -62,6 +64,26 @@ def _compute_consecutive_above_mean(values: list[float], national_mean: float) -
         else:
             break
     return consecutive
+
+
+def classify_prediction_regime(snapshot: Dict[str, Any]) -> str:
+    n_years = int(snapshot.get("n_years_history", 0) or 0)
+    percentile_rank = float(snapshot.get("percentile_rank", 50.0) or 50.0)
+    cv = float(snapshot.get("cv", 1.0) or 1.0)
+    consecutive = int(snapshot.get("consecutive_above_mean", 0) or 0)
+
+    if n_years <= 2:
+        return "sparse"
+
+    if (
+        n_years >= 5
+        and percentile_rank >= 95.0
+        and cv <= 0.08
+        and consecutive >= 4
+    ):
+        return "elite_consistent"
+
+    return "regular"
 
 
 def _default_snapshot(area_key: str, raw_score: float) -> Dict[str, Any]:
@@ -216,6 +238,7 @@ def apply_prediction_guardrails(
     corridor_low = float(corridor.get("low", historical_min))
     corridor_high = float(corridor.get("high", historical_max))
     corridor_low, corridor_high = sorted((corridor_low, corridor_high))
+    regime = classify_prediction_regime(snapshot)
 
     raw_change = raw_score - current_score
     anchor = float(snapshot.get("historical_anchor", current_score))
@@ -226,40 +249,73 @@ def apply_prediction_guardrails(
     elite_drop = elite_consistent and raw_change < -max(1.5 * std, 25.0)
     large_drop = raw_change < -max(2.0 * std, 35.0)
 
+    raw_ci = raw_confidence_interval or {"low": raw_score, "high": raw_score}
+    raw_half_width = max((float(raw_ci["high"]) - float(raw_ci["low"])) / 2.0, 0.0)
     risk_level = "normal"
     risk_reason = None
     calibrated_score = raw_score
+    display_mode = "delta"
+    badge_text = None
 
-    if elite_drop or below_history:
-        calibrated_score = 0.35 * raw_score + 0.65 * anchor
-        risk_level = "outlier" if below_history else "conservative"
-        if below_history:
-            risk_reason = "Predição bruta abaixo da faixa histórica recente da escola."
-        else:
-            risk_reason = "Queda prevista maior que a volatilidade histórica de uma escola de elite consistente."
-    elif outside_corridor or large_drop:
-        calibrated_score = 0.55 * raw_score + 0.45 * anchor
-        risk_level = "outlier" if outside_corridor else "conservative"
-        if outside_corridor:
-            risk_reason = "Predição bruta fora do corredor histórico da escola."
-        else:
-            risk_reason = "Queda prevista acima da volatilidade histórica observada."
+    if regime == "sparse":
+        calibrated_score = current_score
+        risk_level = "conservative"
+        risk_reason = "Histórico curto; a previsão oficial adota persistência até haver evidência suficiente."
+        display_mode = "range"
+        badge_text = RISK_BADGES["sparse"]
+        half_width = max(float(model_rmse or 0.0) * 0.75, 12.0 if area_key != "redacao" else 25.0)
+        confidence_interval = {
+            "low": _clamp(calibrated_score - half_width, float(bounds["min"]), float(bounds["max"])),
+            "high": _clamp(calibrated_score + half_width, float(bounds["min"]), float(bounds["max"])),
+        }
+    elif regime == "elite_consistent":
+        stability_score = (
+            0.70 * current_score
+            + 0.20 * float(snapshot.get("trend_projection", current_score))
+            + 0.10 * float(snapshot.get("historical_mean", current_score))
+        )
+        elite_low = historical_min - (0.5 * std)
+        elite_high = historical_max + (0.5 * std)
+        calibrated_score = _clamp(float(stability_score), float(bounds["min"]), float(bounds["max"]))
+        calibrated_score = _clamp(calibrated_score, elite_low, elite_high)
+        risk_level = "conservative"
+        risk_reason = "Escola de elite e consistente; a previsão oficial prioriza estabilidade histórica em vez de regressão à média."
+        display_mode = "range"
+        badge_text = RISK_BADGES["stability"]
+        half_width = max(std, 0.5 * float(model_rmse or 0.0), 8.0 if area_key != "redacao" else 18.0)
+        confidence_interval = {
+            "low": _clamp(calibrated_score - half_width, float(bounds["min"]), float(bounds["max"])),
+            "high": _clamp(calibrated_score + half_width, float(bounds["min"]), float(bounds["max"])),
+        }
+    else:
+        if elite_drop or below_history:
+            calibrated_score = 0.35 * raw_score + 0.65 * anchor
+            risk_level = "outlier" if below_history else "conservative"
+            if below_history:
+                risk_reason = "Predição bruta abaixo da faixa histórica recente da escola."
+            else:
+                risk_reason = "Queda prevista maior que a volatilidade histórica de uma escola de elite consistente."
+        elif outside_corridor or large_drop:
+            calibrated_score = 0.55 * raw_score + 0.45 * anchor
+            risk_level = "outlier" if outside_corridor else "conservative"
+            if outside_corridor:
+                risk_reason = "Predição bruta fora do corredor histórico da escola."
+            else:
+                risk_reason = "Queda prevista acima da volatilidade histórica observada."
 
-    calibrated_score = _clamp(float(calibrated_score), float(bounds["min"]), float(bounds["max"]))
-    calibrated_score = _clamp(calibrated_score, corridor_low, corridor_high)
+        calibrated_score = _clamp(float(calibrated_score), float(bounds["min"]), float(bounds["max"]))
+        calibrated_score = _clamp(calibrated_score, corridor_low, corridor_high)
 
-    raw_ci = raw_confidence_interval or {"low": raw_score, "high": raw_score}
-    raw_half_width = max((float(raw_ci["high"]) - float(raw_ci["low"])) / 2.0, 0.0)
-    half_width = max(raw_half_width, 1.25 * std, float(model_rmse or 0.0))
-    confidence_interval = {
-        "low": _clamp(calibrated_score - half_width, float(bounds["min"]), float(bounds["max"])),
-        "high": _clamp(calibrated_score + half_width, float(bounds["min"]), float(bounds["max"])),
-    }
-
-    display_mode = "range" if risk_level != "normal" else "delta"
-    badge_text = RISK_BADGES.get(risk_level)
+        half_width = max(raw_half_width, 1.25 * std, float(model_rmse or 0.0))
+        confidence_interval = {
+            "low": _clamp(calibrated_score - half_width, float(bounds["min"]), float(bounds["max"])),
+            "high": _clamp(calibrated_score + half_width, float(bounds["min"]), float(bounds["max"])),
+        }
+        display_mode = "range" if risk_level != "normal" else "delta"
+        badge_text = RISK_BADGES.get(risk_level)
 
     return {
+        "regime": regime,
         "current_score": current_score,
         "raw_score": float(raw_score),
         "display_score": float(calibrated_score),

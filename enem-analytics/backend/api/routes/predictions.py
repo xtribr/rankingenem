@@ -44,6 +44,7 @@ class PredictionAreaPresentation(BaseModel):
     confidence_interval: ConfidenceInterval
     raw_confidence_interval: ConfidenceInterval
     display_mode: str
+    regime: str
     risk_level: str
     risk_reason: Optional[str] = None
     badge_text: Optional[str] = None
@@ -431,6 +432,7 @@ async def get_tri_based_prediction_analysis(
             'confidence_interval': confidence_interval,
             'raw_confidence_interval': presentation.get('raw_confidence_interval') or confidence_interval,
             'display_mode': presentation.get('display_mode', 'delta'),
+            'regime': presentation.get('regime', 'regular'),
             'risk_level': presentation.get('risk_level', 'normal'),
             'risk_reason': presentation.get('risk_reason'),
             'badge_text': presentation.get('badge_text'),
@@ -798,6 +800,7 @@ async def get_area_projection(
             'confidence_interval': official_prediction['confidence_interval'],
             'raw_confidence_interval': official_prediction['raw_confidence_interval'],
             'display_mode': official_prediction['display_mode'],
+            'regime': official_prediction['regime'],
             'risk_level': official_prediction['risk_level'],
             'risk_reason': official_prediction['risk_reason'],
             'badge_text': official_prediction['badge_text'],
@@ -919,6 +922,7 @@ async def predict_school_scores(
                     high=float(value['raw_confidence_interval']['high']),
                 ),
                 display_mode=value['display_mode'],
+                regime=value.get('regime', 'regular'),
                 risk_level=value['risk_level'],
                 risk_reason=value.get('risk_reason'),
                 badge_text=value.get('badge_text'),

@@ -100,6 +100,7 @@ export interface PredictionAreaPresentation {
   confidence_interval: PredictionInterval;
   raw_confidence_interval: PredictionInterval;
   display_mode: 'delta' | 'range';
+  regime: 'elite_consistent' | 'regular' | 'sparse';
   risk_level: 'normal' | 'conservative' | 'outlier';
   risk_reason?: string | null;
   badge_text?: string | null;
@@ -438,6 +439,7 @@ export interface TRIAreaAnalysis {
   confidence_interval: PredictionInterval;
   raw_confidence_interval: PredictionInterval;
   display_mode: 'delta' | 'range';
+  regime: 'elite_consistent' | 'regular' | 'sparse';
   risk_level: 'normal' | 'conservative' | 'outlier';
   risk_reason?: string | null;
   badge_text?: string | null;
@@ -538,6 +540,7 @@ export interface TRIAreaProjection {
     confidence_interval: PredictionInterval;
     raw_confidence_interval: PredictionInterval;
     display_mode: 'delta' | 'range';
+    regime: 'elite_consistent' | 'regular' | 'sparse';
     risk_level: 'normal' | 'conservative' | 'outlier';
     risk_reason?: string | null;
     badge_text?: string | null;
