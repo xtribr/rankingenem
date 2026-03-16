@@ -120,6 +120,23 @@ function ProjectionModal({
     }
   ];
 
+  const chartValues = [
+    ...historicalData.map((point) => point.score),
+    data.projection.recommended,
+    data.projection.confidence_interval.low,
+    data.projection.confidence_interval.high,
+    data.official_prediction.display_score,
+    data.official_prediction.confidence_interval.low,
+    data.official_prediction.confidence_interval.high,
+  ].filter((value): value is number => Number.isFinite(value));
+
+  const chartMin = Math.min(...chartValues);
+  const chartMax = Math.max(...chartValues);
+  const yMin = Math.max(0, Math.floor((chartMin - 20) / 10) * 10);
+  const yMax = Math.ceil((chartMax + 20) / 10) * 10;
+  const tickStep = Math.max(10, Math.ceil((yMax - yMin) / 4 / 10) * 10);
+  const yTicks = Array.from({ length: Math.floor((yMax - yMin) / tickStep) + 1 }, (_, index) => yMin + (index * tickStep));
+
   const trendColor = data.historical_analysis.trend.direction === 'ascending' ? '#22c55e' :
                      data.historical_analysis.trend.direction === 'descending' ? '#ef4444' : '#6b7280';
 
@@ -212,7 +229,7 @@ function ProjectionModal({
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <h3 className="text-sm font-semibold text-gray-900 mb-4">Evolução Histórica e Projeção</h3>
             <ResponsiveContainer width="100%" height={280} minWidth={0}>
-              <ComposedChart data={projectionData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+              <ComposedChart data={projectionData} margin={{ top: 20, right: 30, left: 16, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis
                   dataKey="ano"
@@ -221,8 +238,11 @@ function ProjectionModal({
                   tickLine={false}
                 />
                 <YAxis
-                  domain={['dataMin - 30', 'dataMax + 30']}
+                  domain={[yMin, yMax]}
+                  ticks={yTicks}
+                  width={56}
                   tick={{ fill: '#6b7280', fontSize: 11 }}
+                  tickFormatter={(value) => Math.round(value).toString()}
                   axisLine={false}
                   tickLine={false}
                 />
