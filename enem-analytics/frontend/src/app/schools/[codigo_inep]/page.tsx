@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
-import { formatNumber, formatRanking, formatTriScore } from '@/lib/utils';
+import { getNextEnemYear } from '@/lib/enem-cycle';
+import { formatRanking, formatTriScore } from '@/lib/utils';
 import Link from 'next/link';
 import { ArrowLeft, TrendingUp, TrendingDown, Award, BookOpen, Calculator, PenTool, Grid3X3, AlertTriangle, CheckCircle, Lightbulb, Brain, Target, Users, Sparkles, ChevronRight, Activity, BarChart3, GraduationCap } from 'lucide-react';
 import { BrainXInsights } from '@/components/gliner/GLiNERInsights';
@@ -40,7 +41,7 @@ export default function SchoolDetailPage() {
   // ML Analytics queries
   const { data: predictions } = useQuery({
     queryKey: ['predictions', codigo_inep],
-    queryFn: () => api.getPredictions(codigo_inep, 2025),
+    queryFn: () => api.getPredictions(codigo_inep),
     enabled: !!school,
   });
 
@@ -86,6 +87,7 @@ export default function SchoolDetailPage() {
 
   const latestScore = school.historico[school.historico.length - 1];
   const previousScore = school.historico.length > 1 ? school.historico[school.historico.length - 2] : null;
+  const predictionTargetYear = predictions?.target_year ?? getNextEnemYear(school.historico.map((item) => item.ano));
 
   // Calculate changes
   const getChange = (current: number | null | undefined, previous: number | null | undefined) => {
@@ -575,7 +577,9 @@ export default function SchoolDetailPage() {
                 <div className="h-10 w-10 rounded-lg bg-sky-100 flex items-center justify-center">
                   <Target className="h-5 w-5 text-sky-500" />
                 </div>
-                <h3 className="text-sm font-semibold text-gray-900">Predição 2025</h3>
+                <h3 className="text-sm font-semibold text-gray-900">
+                  Predição {predictionTargetYear || 'próximo ciclo'}
+                </h3>
               </div>
               {predictions ? (
                 <div className="space-y-3">
@@ -583,7 +587,9 @@ export default function SchoolDetailPage() {
                     {mediaPresentation?.display_score?.toFixed(1) || predictions.scores.media?.toFixed(1) || 'N/A'}
                   </div>
                   <p className="text-xs text-gray-500 font-medium">
-                    {mediaPresentation?.display_mode === 'range' ? 'Faixa recomendada para 2025' : 'Média estimada'}
+                    {mediaPresentation?.display_mode === 'range'
+                      ? `Faixa recomendada para ${predictionTargetYear || 'o próximo ciclo'}`
+                      : 'Média estimada'}
                   </p>
                   {mediaPresentation?.display_mode === 'range' ? (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">

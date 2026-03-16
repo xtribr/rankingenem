@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { api, API_BASE } from '@/lib/api';
+import { getNextEnemYear } from '@/lib/enem-cycle';
 import { formatTriScore } from '@/lib/utils';
 import Link from 'next/link';
 import {
@@ -115,6 +116,9 @@ export default function RoadmapPage() {
   const currentScore = roadmap?.current_position?.nota_media_estimada || 0;
   const targetScore = roadmap?.target_position?.nota_media_alvo || 800;
   const progressPercent = Math.round((currentScore / 800) * 100);
+  const targetCycleYear =
+    predictions?.target_year ??
+    getNextEnemYear(school?.historico?.map((item) => item.ano));
 
   const radialData = [
     { name: 'Progresso', value: progressPercent, fill: '#3B82F6' },
@@ -196,7 +200,7 @@ export default function RoadmapPage() {
                 <Target className="h-6 w-6 text-indigo-600" />
               </div>
               <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-full">
-                Meta 2025
+                Meta {targetCycleYear || 'próximo ciclo'}
               </span>
             </div>
             <p className="text-3xl font-bold text-slate-900 mt-4">
@@ -245,7 +249,9 @@ export default function RoadmapPage() {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">Desempenho por Área</h3>
-                <p className="text-sm text-slate-500">Notas TRI previstas para 2025</p>
+                <p className="text-sm text-slate-500">
+                  Notas TRI previstas para {targetCycleYear || 'o próximo ciclo'}
+                </p>
               </div>
               <select className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white">
                 <option>Este ano</option>

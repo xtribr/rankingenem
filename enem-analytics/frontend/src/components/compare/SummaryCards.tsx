@@ -69,7 +69,7 @@ export default function SummaryCards({ school1, school2, diagnosisComparison }: 
               <span className="text-2xl font-bold text-blue-600">
                 {formatTriScore(school1.nota_media)} pts
               </span>
-              <span className="text-sm text-gray-500">(2024)</span>
+              <span className="text-sm text-gray-500">(último ano)</span>
             </div>
 
             {/* Trend */}
@@ -131,7 +131,7 @@ export default function SummaryCards({ school1, school2, diagnosisComparison }: 
               <span className="text-2xl font-bold text-green-600">
                 {formatTriScore(school2.nota_media)} pts
               </span>
-              <span className="text-sm text-gray-500">(2024)</span>
+              <span className="text-sm text-gray-500">(último ano)</span>
             </div>
 
             {/* Trend */}

@@ -139,32 +139,33 @@ async def get_top_potential_improvers(
         from ml.preprocessor import ENEMPreprocessor
         model.preprocessor = ENEMPreprocessor()
 
-    # Get 2024 schools
-    df_2024 = model.preprocessor.df[model.preprocessor.df['ano'] == 2024].copy()
+    latest_data_year = model.get_latest_data_year()
+    latest_year_df = model.preprocessor.df[model.preprocessor.df['ano'] == latest_data_year].copy()
 
     if uf:
-        df_2024 = df_2024[df_2024['uf'] == uf]
+        latest_year_df = latest_year_df[latest_year_df['uf'] == uf]
 
     if tipo_escola:
-        df_2024 = df_2024[df_2024['tipo_escola'] == tipo_escola]
+        latest_year_df = latest_year_df[latest_year_df['tipo_escola'] == tipo_escola]
 
     # Sample schools for batch prediction (limit computation)
-    sample_schools = df_2024['codigo_inep'].head(500).tolist()
+    sample_schools = latest_year_df['codigo_inep'].head(500).tolist()
 
     results = []
     for codigo_inep in sample_schools:
         try:
             pred = model.predict(codigo_inep, 'nota_media')
-            actual = df_2024[df_2024['codigo_inep'] == codigo_inep]['nota_media'].values[0]
+            actual = latest_year_df[latest_year_df['codigo_inep'] == codigo_inep]['nota_media'].values[0]
 
             if actual and pred['prediction']:
                 improvement = pred['prediction'] - actual
                 results.append({
                     'codigo_inep': codigo_inep,
-                    'nome_escola': df_2024[df_2024['codigo_inep'] == codigo_inep]['nome_escola'].values[0],
+                    'nome_escola': latest_year_df[latest_year_df['codigo_inep'] == codigo_inep]['nome_escola'].values[0],
                     'nota_atual': float(actual),
                     'nota_prevista': pred['prediction'],
-                    'melhoria_esperada': improvement
+                    'melhoria_esperada': improvement,
+                    'ano_atual': latest_data_year,
                 })
         except (ValueError, IndexError, KeyError):
             continue
@@ -234,7 +235,7 @@ async def get_prediction_comparison(
         'codigo_inep': codigo_inep,
         'historical': historical,
         'predicted': {
-            'year': predictions.get('target_year', 2025),
+            'year': predictions.get('target_year', model.get_supported_target_year()),
             'scores': predictions.get('scores', {}),
             'raw_scores': predictions.get('raw_scores', {}),
             'display_scores': predictions.get('display_scores', {}),
@@ -793,7 +794,7 @@ async def get_area_projection(
             'potential_gain': float(potential_gain)
         },
         'official_prediction': {
-            'target_year': 2025,
+            'target_year': next_year,
             'current_score': float(official_prediction['current_score']),
             'raw_score': float(official_prediction['raw_score']),
             'display_score': float(official_prediction['display_score']),
@@ -855,23 +856,34 @@ async def predict_single_score(
 @router.get("/{codigo_inep}", response_model=PredictionResult)
 async def predict_school_scores(
     codigo_inep: str,
-    target_year: int = Query(2025, ge=2025, le=2025),
+    target_year: Optional[int] = Query(None, ge=2020),
     _: UserProfile = Depends(get_authorized_school_user),
 ):
     """
     Predict all TRI scores for a school.
 
-    The model predicts the next ENEM cycle (2025) based on historical data.
-    It cannot extrapolate to years beyond 2025.
+    The model predicts the next ENEM cycle supported by the latest ENEM year
+    currently loaded in the dataset.
 
     Args:
         codigo_inep: School INEP code
-        target_year: Fixed at 2025 (model does not support other years)
+        target_year: Optional explicit target year. Must match the next
+            supported cycle derived from the latest available ENEM data.
 
     Returns:
         Predicted scores with confidence intervals
     """
     model = get_prediction_model()
+    supported_target_year = model.get_supported_target_year()
+
+    if target_year is not None and target_year != supported_target_year:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Target year {target_year} not supported by the loaded model. "
+                f"Current dataset supports forecasting {supported_target_year}."
+            ),
+        )
 
     try:
         result = model.predict_all_scores(codigo_inep)
@@ -885,7 +897,7 @@ async def predict_school_scores(
 
     return PredictionResult(
         codigo_inep=codigo_inep,
-        target_year=result.get('target_year', 2025),
+        target_year=result.get('target_year', supported_target_year),
         scores=result.get('scores', {}),
         raw_scores=result.get('raw_scores', {}),
         display_scores=result.get('display_scores', {}),

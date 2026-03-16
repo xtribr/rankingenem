@@ -91,7 +91,7 @@ export default function RankingComparison({
         <h2 className="text-xl font-semibold text-gray-900">Rankings e Posição Relativa</h2>
       </div>
       <p className="text-sm text-gray-500 mb-6">
-        Posição no ranking por diferentes perspectivas (2024)
+        Posição no ranking por diferentes perspectivas no último ano disponível
       </p>
 
       {/* Rankings Table */}

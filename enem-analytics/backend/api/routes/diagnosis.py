@@ -44,9 +44,10 @@ async def get_national_stats(
         Statistics (mean, std, percentiles) for each area
     """
     engine = get_diagnosis_engine()
+    latest_year = int(engine.df["ano"].max())
 
     return {
-        'year': 2024,
+        'year': latest_year,
         'areas': engine.area_stats,
         'skill_count': len(engine.skill_averages)
     }
@@ -63,6 +64,7 @@ async def get_skill_stats(
         Average performance for each skill (120 skills total)
     """
     engine = get_diagnosis_engine()
+    latest_year = int(engine.df["ano"].max())
 
     # Group by area
     skills_by_area = {'CN': [], 'CH': [], 'LC': [], 'MT': []}
@@ -84,7 +86,7 @@ async def get_skill_stats(
         skills_by_area[area].sort(key=lambda x: x['skill_number'])
 
     return {
-        'year': 2024,
+        'year': latest_year,
         'skills_by_area': skills_by_area,
         'total_skills': len(engine.skill_averages)
     }

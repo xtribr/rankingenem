@@ -39,7 +39,6 @@ TARGETS = [
     "nota_redacao",
     "nota_media",
 ]
-DEFAULT_TARGET_YEAR = 2025
 MODEL_VERSION = "soft-cal-v1"
 AUDIT_REPORT_NAME = "prediction_audit_report.json"
 BACKTEST_TRAIN_SAMPLE_CAP = 10000
@@ -89,6 +88,13 @@ class ENEMPredictionModel:
         if self.preprocessor is None:
             self.preprocessor = ENEMPreprocessor()
         return self.preprocessor
+
+    def get_latest_data_year(self) -> int:
+        preprocessor = self._ensure_preprocessor()
+        return int(preprocessor.df["ano"].max())
+
+    def get_supported_target_year(self) -> int:
+        return self.get_latest_data_year() + 1
 
     @staticmethod
     def _safe_r2(actual: pd.Series, predicted: np.ndarray) -> Optional[float]:
@@ -619,9 +625,10 @@ class ENEMPredictionModel:
         }
 
     def predict_all_scores(self, codigo_inep: str) -> Dict[str, Any]:
+        supported_target_year = self.get_supported_target_year()
         predictions: Dict[str, Any] = {
             "codigo_inep": codigo_inep,
-            "target_year": DEFAULT_TARGET_YEAR,
+            "target_year": supported_target_year,
             "scores": {},
             "raw_scores": {},
             "display_scores": {},

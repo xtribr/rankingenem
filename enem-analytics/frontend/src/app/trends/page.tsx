@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { getLatestEnemYear } from '@/lib/enem-cycle';
 import { formatRanking, formatTriScore } from '@/lib/utils';
 import Link from 'next/link';
 import { TrendingUp, TrendingDown, Bell } from 'lucide-react';
@@ -11,6 +12,7 @@ export default function TrendsPage() {
     queryKey: ['topSchools', 50],
     queryFn: () => api.getTopSchools(50),
   });
+  const latestYear = topSchools?.ano || null;
 
   return (
     <div className="min-h-screen">
@@ -40,10 +42,10 @@ export default function TrendsPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex items-center gap-2 mb-4">
           <TrendingUp className="h-6 w-6 text-green-600" />
-          <h2 className="text-xl font-semibold text-gray-900">Top 50 Escolas - 2024</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Top 50 Escolas - {latestYear || 'último ano'}</h2>
         </div>
         <p className="text-gray-600 mb-6">
-          As melhores escolas do Brasil no ENEM 2024, ordenadas por ranking.
+          As melhores escolas do Brasil no ENEM {latestYear || 'mais recente'}, ordenadas por ranking.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

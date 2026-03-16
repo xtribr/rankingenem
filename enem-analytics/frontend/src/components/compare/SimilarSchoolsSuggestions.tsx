@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, TopSchool } from '@/lib/api';
+import { getLatestEnemYear } from '@/lib/enem-cycle';
 import { Trophy, Target, TrendingUp, ChevronRight, Search, MapPin } from 'lucide-react';
 import { formatTriScore } from '@/lib/utils';
 
@@ -31,7 +32,7 @@ export default function SimilarSchoolsSuggestions({
   // Extract school's UF and current ranking from the most recent year with data
   const schoolUF = schoolInfo?.uf;
   const latestHistory = schoolInfo?.history?.[schoolInfo.history.length - 1];
-  const latestYear = latestHistory?.ano || 2024;
+  const latestYear = latestHistory?.ano || getLatestEnemYear(schoolInfo?.history?.map((item) => item.ano)) || undefined;
   const schoolRanking = latestHistory?.ranking_brasil;
 
   // Fetch top schools from same region (for competitors - need enough to filter those above)

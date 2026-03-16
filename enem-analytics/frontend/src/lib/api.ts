@@ -801,8 +801,12 @@ export const api = {
     }>(`/api/schools/${codigo_inep}/skills?limit=${limit}`),
 
   // ML APIs - Predictions
-  getPredictions: (codigo_inep: string, target_year = 2025) =>
-    fetchAPI<PredictionResult>(`/api/predictions/${codigo_inep}?target_year=${target_year}`),
+  getPredictions: (codigo_inep: string, target_year?: number) => {
+    const params = new URLSearchParams();
+    if (typeof target_year === 'number') params.set('target_year', String(target_year));
+    const query = params.toString();
+    return fetchAPI<PredictionResult>(`/api/predictions/${codigo_inep}${query ? `?${query}` : ''}`);
+  },
 
   getPredictionComparison: (codigo_inep: string) =>
     fetchAPI<PredictionComparison>(`/api/predictions/comparison/${codigo_inep}`),

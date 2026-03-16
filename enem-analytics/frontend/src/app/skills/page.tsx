@@ -67,7 +67,7 @@ export default function SkillsPage() {
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Habilidades Mais Difíceis</h1>
         <p className="text-gray-600 mt-1">
-          Top 10 habilidades com menor desempenho por área (média nacional - ENEM 2024)
+          Top 10 habilidades com menor desempenho por área no último ENEM disponível
         </p>
       </div>
 

@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { getLatestEnemYear, getNextEnemYear, getYearRangeLabel } from '@/lib/enem-cycle';
 import { formatNumber, formatTriScore } from '@/lib/utils';
 import Link from 'next/link';
 import { 
@@ -39,6 +40,9 @@ export default function Dashboard() {
     month: 'long',
     year: 'numeric'
   });
+  const latestDataYear = getLatestEnemYear(stats?.years);
+  const nextEnemYear = getNextEnemYear(stats?.years);
+  const yearRangeLabel = getYearRangeLabel(stats?.years);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -64,7 +68,7 @@ export default function Dashboard() {
       </div>
 
       <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
-        {/* 2025 Data Coming Soon Banner */}
+        {/* Upcoming ENEM Cycle Banner */}
         <div className="relative overflow-hidden rounded-2xl p-6 text-white" style={{ background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #0ea5e9 100%)' }}>
           <div className="relative z-10 flex items-center justify-between">
             <div className="flex items-center gap-5">
@@ -73,11 +77,15 @@ export default function Dashboard() {
               </div>
               <div>
                 <div className="flex items-center gap-3">
-                  <h2 className="text-xl font-bold">ENEM 2025 - Em Breve!</h2>
-                  <span className="px-3 py-1 rounded-full bg-white/20 text-xs font-semibold backdrop-blur-sm">Junho 2025</span>
+                  <h2 className="text-xl font-bold">ENEM {nextEnemYear || 'Próximo Ciclo'} - Em Breve!</h2>
+                  <span className="px-3 py-1 rounded-full bg-white/20 text-xs font-semibold backdrop-blur-sm">
+                    Próximo ciclo
+                  </span>
                 </div>
                 <p className="text-white/90 text-sm mt-1.5 max-w-xl">
-                  Os dados do ENEM 2025 serão integrados assim que divulgados pelo INEP. 
+                  {latestDataYear
+                    ? `Os dados reais de ${nextEnemYear} serão integrados assim que divulgados pelo INEP. A base atual vai até ${latestDataYear}.`
+                    : 'Os próximos dados do ENEM serão integrados assim que divulgados pelo INEP.'}{' '}
                   Prepare-se para novas análises e predições.
                 </p>
               </div>
@@ -109,7 +117,7 @@ export default function Dashboard() {
             icon={Calendar}
             label="Anos de Dados"
             value={`${stats?.years.length || 0}`}
-            subtitle="2018 - 2024"
+            subtitle={yearRangeLabel}
             trend="Completo"
             trendUp={true}
             color="emerald"
