@@ -3,7 +3,7 @@ Diagnosis API endpoints for ENEM Analytics
 Skill gap analysis and priority recommendations
 """
 
-from fastapi import APIRouter, HTTPException, Query, Path as PathParam
+from fastapi import APIRouter, Depends, HTTPException, Query, Path as PathParam
 from pydantic import BaseModel
 from typing import Dict, List, Optional, Any
 import sys
@@ -13,6 +13,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from ml.diagnosis_engine import DiagnosisEngine
+from api.auth.authorization import get_authorized_school_user
+from api.auth.supabase_dependencies import UserProfile, get_current_admin
 
 router = APIRouter(prefix="/api/diagnosis", tags=["diagnosis"])
 
@@ -32,7 +34,9 @@ def get_diagnosis_engine() -> DiagnosisEngine:
 # IMPORTANT: Static routes must come BEFORE dynamic routes
 
 @router.get("/stats/national")
-async def get_national_stats():
+async def get_national_stats(
+    _: UserProfile = Depends(get_current_admin),
+):
     """
     Get national statistics for all areas
 
@@ -49,7 +53,9 @@ async def get_national_stats():
 
 
 @router.get("/stats/skills")
-async def get_skill_stats():
+async def get_skill_stats(
+    _: UserProfile = Depends(get_current_admin),
+):
     """
     Get national skill averages
 
@@ -87,7 +93,8 @@ async def get_skill_stats():
 @router.get("/compare/{codigo_inep_1}/{codigo_inep_2}")
 async def compare_schools(
     codigo_inep_1: str,
-    codigo_inep_2: str
+    codigo_inep_2: str,
+    _: UserProfile = Depends(get_current_admin),
 ):
     """
     Compare two schools
@@ -118,7 +125,10 @@ async def compare_schools(
 
 
 @router.get("/{codigo_inep}/improvement-potential")
-async def get_improvement_potential(codigo_inep: str):
+async def get_improvement_potential(
+    codigo_inep: str,
+    _: UserProfile = Depends(get_authorized_school_user),
+):
     """
     Calculate potential improvement for a school
 
@@ -141,7 +151,8 @@ async def get_improvement_potential(codigo_inep: str):
 @router.get("/{codigo_inep}/quick-wins")
 async def get_quick_wins(
     codigo_inep: str,
-    limit: int = Query(10, ge=1, le=30)
+    limit: int = Query(10, ge=1, le=30),
+    _: UserProfile = Depends(get_authorized_school_user),
 ):
     """
     Get quick win recommendations - areas with best improvement ROI
@@ -192,7 +203,8 @@ async def get_quick_wins(
 @router.get("/{codigo_inep}/area/{area}")
 async def get_area_diagnosis(
     codigo_inep: str,
-    area: str = PathParam(..., pattern="^(CN|CH|LC|MT|redacao)$")
+    area: str = PathParam(..., pattern="^(CN|CH|LC|MT|redacao)$"),
+    _: UserProfile = Depends(get_authorized_school_user),
 ):
     """
     Get detailed diagnosis for a specific area
@@ -238,7 +250,10 @@ async def get_area_diagnosis(
 
 
 @router.get("/{codigo_inep}")
-async def get_diagnosis(codigo_inep: str):
+async def get_diagnosis(
+    codigo_inep: str,
+    _: UserProfile = Depends(get_authorized_school_user),
+):
     """
     Get comprehensive diagnosis for a school
 

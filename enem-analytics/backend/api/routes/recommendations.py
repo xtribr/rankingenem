@@ -3,7 +3,7 @@ Recommendations API endpoints for ENEM Analytics
 Evidence-based recommendations with success stories and roadmaps
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
 import sys
 from pathlib import Path
@@ -12,6 +12,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from ml.recommendation_engine import RecommendationEngine
+from api.auth.authorization import get_authorized_school_user
+from api.auth.supabase_dependencies import UserProfile, get_current_admin
 
 router = APIRouter(prefix="/api/recommendations", tags=["recommendations"])
 
@@ -29,7 +31,10 @@ def get_recommendation_engine() -> RecommendationEngine:
 
 
 @router.get("/{codigo_inep}")
-async def get_recommendations(codigo_inep: str):
+async def get_recommendations(
+    codigo_inep: str,
+    _: UserProfile = Depends(get_authorized_school_user),
+):
     """
     Get comprehensive recommendations for a school
 
@@ -55,7 +60,10 @@ async def get_recommendations(codigo_inep: str):
 
 
 @router.get("/{codigo_inep}/roadmap")
-async def get_roadmap(codigo_inep: str):
+async def get_roadmap(
+    codigo_inep: str,
+    _: UserProfile = Depends(get_authorized_school_user),
+):
     """
     Get a phased improvement roadmap for a school
 
@@ -85,7 +93,8 @@ async def get_roadmap(codigo_inep: str):
 @router.get("/{codigo_inep}/success-stories")
 async def get_success_stories(
     codigo_inep: str,
-    limit: int = Query(10, ge=1, le=50)
+    limit: int = Query(10, ge=1, le=50),
+    _: UserProfile = Depends(get_authorized_school_user),
 ):
     """
     Get success stories from similar schools
@@ -115,7 +124,8 @@ async def get_success_stories(
 @router.get("/{codigo_inep}/quick-wins")
 async def get_quick_wins(
     codigo_inep: str,
-    limit: int = Query(5, ge=1, le=20)
+    limit: int = Query(5, ge=1, le=20),
+    _: UserProfile = Depends(get_authorized_school_user),
 ):
     """
     Get quick win recommendations
@@ -153,7 +163,8 @@ async def get_quick_wins(
 @router.get("/{codigo_inep}/priorities")
 async def get_priorities(
     codigo_inep: str,
-    limit: int = Query(5, ge=1, le=20)
+    limit: int = Query(5, ge=1, le=20),
+    _: UserProfile = Depends(get_authorized_school_user),
 ):
     """
     Get high priority recommendations
@@ -191,7 +202,8 @@ async def get_priorities(
 @router.get("/{codigo_inep}/area/{area}")
 async def get_area_recommendations(
     codigo_inep: str,
-    area: str
+    area: str,
+    _: UserProfile = Depends(get_authorized_school_user),
 ):
     """
     Get detailed recommendations for a specific area
@@ -234,7 +246,10 @@ async def get_area_recommendations(
 
 
 @router.get("/{codigo_inep}/action-plan")
-async def get_action_plan(codigo_inep: str):
+async def get_action_plan(
+    codigo_inep: str,
+    _: UserProfile = Depends(get_authorized_school_user),
+):
     """
     Get a consolidated action plan
 
@@ -293,7 +308,8 @@ async def get_action_plan(codigo_inep: str):
 async def get_top_improvers(
     limit: int = Query(20, ge=1, le=100),
     uf: Optional[str] = None,
-    tipo_escola: Optional[str] = None
+    tipo_escola: Optional[str] = None,
+    _: UserProfile = Depends(get_current_admin),
 ):
     """
     Get schools that improved the most

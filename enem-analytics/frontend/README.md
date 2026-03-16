@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ranking ENEM Frontend
 
-## Getting Started
+Frontend Next.js da plataforma `app.rankingenem.com`.
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Next.js App Router
+- React
+- Tailwind CSS
+- Supabase Auth
+
+## Variáveis de ambiente
+
+Crie `.env.local` em desenvolvimento ou configure no Coolify:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`NEXT_PUBLIC_*` é embutido no build. Qualquer alteração exige novo deploy do frontend.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Desenvolvimento local
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+cd enem-analytics/frontend
+pnpm install
+pnpm dev
+```
 
-## Learn More
+## Docker / Coolify
 
-To learn more about Next.js, take a look at the following resources:
+- Base Directory: `/enem-analytics/frontend`
+- Dockerfile Location: `/Dockerfile`
+- Port Expose: `3000`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+No Coolify, configure as variáveis acima e faça novo deploy sempre que mudar:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `NEXT_PUBLIC_API_URL`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
-## Deploy on Vercel
+## Fluxo de autenticação
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Login é feito diretamente pelo Supabase Auth.
+- O frontend lê a sessão do Supabase e busca o perfil do usuário.
+- Usuário admin acessa o dashboard completo.
+- Usuário escola fica restrito à própria escola e ao roadmap.

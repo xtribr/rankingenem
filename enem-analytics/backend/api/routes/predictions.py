@@ -2,7 +2,7 @@
 Prediction API endpoints for ENEM Analytics
 """
 
-from fastapi import APIRouter, HTTPException, Query, Path as PathParam
+from fastapi import APIRouter, Depends, HTTPException, Query, Path as PathParam
 from pydantic import BaseModel
 from typing import Dict, List, Optional, Any
 import sys
@@ -12,6 +12,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from ml.prediction_model import ENEMPredictionModel
+from api.auth.authorization import get_authorized_school_user
+from api.auth.supabase_dependencies import UserProfile, get_current_admin
 
 router = APIRouter(prefix="/api/predictions", tags=["predictions"])
 
@@ -73,7 +75,8 @@ class ScenarioResult(BaseModel):
 async def get_top_potential_improvers(
     limit: int = Query(20, ge=1, le=100),
     uf: Optional[str] = None,
-    tipo_escola: Optional[str] = None
+    tipo_escola: Optional[str] = None,
+    _: UserProfile = Depends(get_current_admin),
 ):
     """
     Get schools with highest predicted improvement potential
@@ -135,7 +138,10 @@ async def get_top_potential_improvers(
 
 
 @router.get("/comparison/{codigo_inep}")
-async def get_prediction_comparison(codigo_inep: str):
+async def get_prediction_comparison(
+    codigo_inep: str,
+    _: UserProfile = Depends(get_authorized_school_user),
+):
     """
     Compare predicted scores with actual historical performance
 
@@ -201,7 +207,8 @@ async def get_prediction_comparison(codigo_inep: str):
 @router.get("/{codigo_inep}/feature-importance/{target}", response_model=List[FeatureImportance])
 async def get_feature_importance(
     codigo_inep: str,
-    target: str = PathParam(..., pattern="^(cn|ch|lc|mt|redacao|media)$")
+    target: str = PathParam(..., pattern="^(cn|ch|lc|mt|redacao|media)$"),
+    _: UserProfile = Depends(get_authorized_school_user),
 ):
     """
     Get feature importance for a prediction model
@@ -232,7 +239,10 @@ import pandas as pd
 
 
 @router.get("/{codigo_inep}/tri-analysis")
-async def get_tri_based_prediction_analysis(codigo_inep: str):
+async def get_tri_based_prediction_analysis(
+    codigo_inep: str,
+    _: UserProfile = Depends(get_authorized_school_user),
+):
     """
     Get TRI-based prediction analysis for a school.
 
@@ -418,7 +428,8 @@ def _get_improvement_recommendation(weak_skills: float) -> str:
 @router.get("/{codigo_inep}/area-projection/{area}")
 async def get_area_projection(
     codigo_inep: str,
-    area: str = PathParam(..., pattern="^(cn|ch|lc|mt|re|redacao|CN|CH|LC|MT|RE|REDACAO)$")
+    area: str = PathParam(..., pattern="^(cn|ch|lc|mt|re|redacao|CN|CH|LC|MT|RE|REDACAO)$"),
+    _: UserProfile = Depends(get_authorized_school_user),
 ):
     """
     Get detailed TRI projection for a specific area.
@@ -723,7 +734,8 @@ async def get_area_projection(
 @router.get("/{codigo_inep}/{target}", response_model=SinglePrediction)
 async def predict_single_score(
     codigo_inep: str,
-    target: str = PathParam(..., pattern="^(cn|ch|lc|mt|redacao|media)$")
+    target: str = PathParam(..., pattern="^(cn|ch|lc|mt|redacao|media)$"),
+    _: UserProfile = Depends(get_authorized_school_user),
 ):
     """
     Predict a single TRI score for a school
@@ -761,7 +773,8 @@ async def predict_single_score(
 @router.get("/{codigo_inep}", response_model=PredictionResult)
 async def predict_school_scores(
     codigo_inep: str,
-    target_year: int = Query(2025, ge=2025, le=2025)
+    target_year: int = Query(2025, ge=2025, le=2025),
+    _: UserProfile = Depends(get_authorized_school_user),
 ):
     """
     Predict all TRI scores for a school.

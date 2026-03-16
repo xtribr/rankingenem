@@ -2,10 +2,12 @@
 Rotas do Oráculo ENEM - Predições para 2026
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from typing import Optional, List
 import json
 from pathlib import Path
+
+from api.auth.supabase_dependencies import UserProfile, get_current_admin
 
 router = APIRouter(prefix="/api/oracle", tags=["oracle"])
 
@@ -26,7 +28,8 @@ def load_predictions():
 async def get_all_predictions(
     limit: Optional[int] = None,
     area: Optional[str] = None,
-    tipo: Optional[str] = None
+    tipo: Optional[str] = None,
+    _: UserProfile = Depends(get_current_admin),
 ):
     """
     Retorna todas as predições do Oráculo para ENEM 2026.
@@ -69,7 +72,11 @@ async def get_all_predictions(
 
 
 @router.get("/predictions/{area}")
-async def get_predictions_by_area(area: str, limit: Optional[int] = 10):
+async def get_predictions_by_area(
+    area: str,
+    limit: Optional[int] = 10,
+    _: UserProfile = Depends(get_current_admin),
+):
     """
     Retorna predições para uma área específica.
 
@@ -117,7 +124,10 @@ async def get_predictions_by_area(area: str, limit: Optional[int] = 10):
 
 
 @router.get("/skills")
-async def get_skill_predictions(area: Optional[str] = None):
+async def get_skill_predictions(
+    area: Optional[str] = None,
+    _: UserProfile = Depends(get_current_admin),
+):
     """
     Retorna predições de habilidades mais prováveis.
 
@@ -149,7 +159,9 @@ async def get_skill_predictions(area: Optional[str] = None):
 
 
 @router.get("/summary")
-async def get_oracle_summary():
+async def get_oracle_summary(
+    _: UserProfile = Depends(get_current_admin),
+):
     """
     Retorna um resumo das predições do Oráculo.
 
@@ -189,7 +201,9 @@ async def get_oracle_summary():
 
 
 @router.get("/metodologia")
-async def get_methodology():
+async def get_methodology(
+    _: UserProfile = Depends(get_current_admin),
+):
     """
     Retorna informações sobre a metodologia do Oráculo.
 

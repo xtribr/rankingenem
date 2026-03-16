@@ -3,12 +3,15 @@ TRI Lists API - Study materials by TRI score range
 Provides content recommendations based on predicted scores
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from typing import Optional, List
 import pandas as pd
 from pathlib import Path
 import os
+
+from api.auth.authorization import get_authorized_school_user
+from api.auth.supabase_dependencies import UserProfile, get_current_admin
 
 router = APIRouter(prefix="/api/tri-lists", tags=["tri-lists"])
 
@@ -80,7 +83,9 @@ def get_recommended_range(predicted_score: float) -> str:
 
 
 @router.get("/areas")
-async def list_areas():
+async def list_areas(
+    _: UserProfile = Depends(get_current_admin),
+):
     """List available areas with content counts"""
     df = get_tri_content()
 
@@ -103,7 +108,9 @@ async def list_areas():
 
 
 @router.get("/ranges")
-async def list_ranges():
+async def list_ranges(
+    _: UserProfile = Depends(get_current_admin),
+):
     """List available TRI ranges with descriptions"""
     return {
         'ranges': [
@@ -122,7 +129,8 @@ async def get_area_content(
     tri_range: Optional[str] = None,
     habilidade: Optional[str] = None,
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0)
+    offset: int = Query(0, ge=0),
+    _: UserProfile = Depends(get_current_admin),
 ):
     """
     Get TRI content for an area
@@ -178,7 +186,8 @@ async def get_area_content(
 @router.get("/recommend/{codigo_inep}")
 async def get_recommended_content(
     codigo_inep: str,
-    limit_per_area: int = Query(15, ge=1, le=100)
+    limit_per_area: int = Query(15, ge=1, le=100),
+    _: UserProfile = Depends(get_authorized_school_user),
 ):
     """
     Get recommended study content based on school's predicted scores
@@ -378,7 +387,10 @@ async def download_material(area: str, tri_range: str, filename: str):
 
 
 @router.get("/download/escola/{codigo_inep}")
-async def get_school_materials(codigo_inep: str):
+async def get_school_materials(
+    codigo_inep: str,
+    _: UserProfile = Depends(get_authorized_school_user),
+):
     """
     Get downloadable materials filtered by school's recommended TRI ranges.
     Returns only materials within the amplitude suitable for the school's level.
@@ -484,7 +496,10 @@ async def get_school_materials(codigo_inep: str):
 
 
 @router.get("/export/plano/{codigo_inep}")
-async def export_improvement_plan(codigo_inep: str):
+async def export_improvement_plan(
+    codigo_inep: str,
+    _: UserProfile = Depends(get_authorized_school_user),
+):
     """
     Export school's improvement plan as downloadable CSV with TRI amplitudes.
     Includes: areas, current scores, target scores, recommended TRI ranges, content suggestions.
@@ -623,7 +638,10 @@ async def export_improvement_plan(codigo_inep: str):
 
 
 @router.get("/skills/{area}")
-async def get_area_skills(area: str):
+async def get_area_skills(
+    area: str,
+    _: UserProfile = Depends(get_current_admin),
+):
     """Get all skills (habilidades) for an area with content distribution"""
     area = area.upper()
     if area not in AREA_NAMES:

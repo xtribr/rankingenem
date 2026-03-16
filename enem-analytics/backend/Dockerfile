@@ -19,7 +19,7 @@ COPY . .
 # Create data directory for cache
 RUN mkdir -p /app/data
 
-# Expose port (Fly.io uses 8080, Railway uses PORT env)
+# Expose port for container platforms such as Coolify
 EXPOSE 8080
 
 # Run with single worker (GLiNER2 is not thread-safe)

@@ -3,24 +3,14 @@ School endpoints for ENEM Analytics API
 Uses DuckDB for fast analytical queries (10-100x faster than Pandas)
 """
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException
 from typing import Optional, List, Dict
 from pydantic import BaseModel
 import pandas as pd
 import os
-from supabase import create_client
 
-# Supabase configuration for school skills
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://rqzxcturezryjbwsptld.supabase.co")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
-_supabase_client = None
-
-def get_supabase():
-    """Get or create Supabase client."""
-    global _supabase_client
-    if _supabase_client is None and SUPABASE_SERVICE_KEY:
-        _supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-    return _supabase_client
+from api.auth.authorization import get_authorized_school_user
+from api.auth.supabase_dependencies import UserProfile, get_current_admin
 
 # Supabase-based data layer
 from data.supabase_store import (
@@ -190,10 +180,7 @@ def fetch_school_skills_from_supabase(codigo_inep: str, ano: Optional[int] = Non
     Returns:
         List of skill performance records
     """
-    supabase = get_supabase()
-    if not supabase:
-        print("Supabase client not available, SUPABASE_SERVICE_KEY may be missing")
-        return []
+    supabase = get_supabase_store()
 
     try:
         query = supabase.table("school_skills").select("*").eq("codigo_inep", codigo_inep)
@@ -225,9 +212,7 @@ def fetch_school_skills_from_supabase(codigo_inep: str, ano: Optional[int] = Non
 
 def get_available_years() -> List[int]:
     """Get list of years with school skills data."""
-    supabase = get_supabase()
-    if not supabase:
-        return [2024]
+    supabase = get_supabase_store()
 
     try:
         result = supabase.table("school_skills").select("ano").limit(1000).execute()
@@ -292,7 +277,8 @@ async def list_schools(
     porte: Optional[int] = None,
     ano: Optional[int] = None,
     order_by: str = Query("ranking", regex="^(ranking|nota|nome)$"),
-    order: str = Query("asc", regex="^(asc|desc)$")
+    order: str = Query("asc", regex="^(asc|desc)$"),
+    _: UserProfile = Depends(get_current_admin),
 ):
     """
     List schools with pagination and filtering (DuckDB optimized)
@@ -343,7 +329,8 @@ async def get_top_schools(
     uf: Optional[str] = None,
     tipo_escola: Optional[str] = None,
     localizacao: Optional[str] = None,
-    porte: Optional[int] = None
+    porte: Optional[int] = None,
+    _: UserProfile = Depends(get_current_admin),
 ):
     """
     Get top ranked schools (DuckDB optimized)
@@ -368,7 +355,8 @@ async def get_top_schools(
 @router.get("/search")
 async def search_schools(
     q: str = Query(..., min_length=2),
-    limit: int = Query(20, ge=1, le=100)
+    limit: int = Query(20, ge=1, le=100),
+    _: UserProfile = Depends(get_current_admin),
 ):
     """
     Quick search for schools by name or INEP code (DuckDB optimized)
@@ -378,7 +366,10 @@ async def search_schools(
 
 
 @router.get("/{codigo_inep}", response_model=SchoolDetail)
-async def get_school(codigo_inep: str):
+async def get_school(
+    codigo_inep: str,
+    _: UserProfile = Depends(get_authorized_school_user),
+):
     """
     Get detailed information for a specific school (DuckDB optimized)
     """
@@ -418,7 +409,10 @@ async def get_school(codigo_inep: str):
 
 
 @router.get("/{codigo_inep}/history")
-async def get_school_history(codigo_inep: str):
+async def get_school_history(
+    codigo_inep: str,
+    _: UserProfile = Depends(get_authorized_school_user),
+):
     """Get complete history for a school with year-over-year comparison"""
     client = get_supabase_store()
     result = client.table("enem_results").select(
@@ -474,7 +468,11 @@ async def get_school_history(codigo_inep: str):
 
 
 @router.get("/compare/{inep1}/{inep2}")
-async def compare_schools(inep1: str, inep2: str):
+async def compare_schools(
+    inep1: str,
+    inep2: str,
+    _: UserProfile = Depends(get_current_admin),
+):
     """Compare two schools side by side"""
     client = get_supabase_store()
 
@@ -530,7 +528,8 @@ async def compare_schools(inep1: str, inep2: str):
 @router.get("/skills/worst")
 async def get_worst_skills(
     area: Optional[str] = Query(None, regex="^(CN|CH|LC|MT)$"),
-    limit: int = Query(10, ge=1, le=30)
+    limit: int = Query(10, ge=1, le=30),
+    _: UserProfile = Depends(get_current_admin),
 ):
     """
     Get the worst performing skills (most missed by students) per area.
@@ -566,7 +565,8 @@ async def get_worst_skills(
 
 @router.get("/skills/all")
 async def get_all_skills(
-    area: Optional[str] = Query(None, regex="^(CN|CH|LC|MT)$")
+    area: Optional[str] = Query(None, regex="^(CN|CH|LC|MT)$"),
+    _: UserProfile = Depends(get_current_admin),
 ):
     """
     Get all skills performance data, optionally filtered by area.
@@ -598,7 +598,8 @@ async def get_all_skills(
 async def get_school_skills(
     codigo_inep: str,
     limit: int = Query(10, ge=1, le=30),
-    ano: Optional[int] = Query(None, description="Year of data (defaults to latest)")
+    ano: Optional[int] = Query(None, description="Year of data (defaults to latest)"),
+    _: UserProfile = Depends(get_authorized_school_user),
 ):
     """
     Get skill performance for a specific school.

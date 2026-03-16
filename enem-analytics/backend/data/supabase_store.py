@@ -9,15 +9,18 @@ from supabase import create_client, Client
 
 _client: Optional[Client] = None
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://rqzxcturezryjbwsptld.supabase.co")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 
 
 def get_client() -> Client:
     global _client
     if _client is None:
-        key = SUPABASE_SERVICE_KEY or os.getenv("SUPABASE_ANON_KEY", "")
-        _client = create_client(SUPABASE_URL, key)
+        if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+            raise RuntimeError(
+                "Supabase not configured. Set SUPABASE_URL and SUPABASE_SERVICE_KEY"
+            )
+        _client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
     return _client
 
 

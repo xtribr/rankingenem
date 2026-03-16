@@ -1,148 +1,143 @@
-# X-TRI Escolas - Ranking ENEM Analytics
+# Ranking ENEM Analytics
 
-Plataforma de análise de desempenho escolar no ENEM com inteligência artificial.
+Plataforma da XTRI para análise de desempenho escolar no ENEM.
 
-## Stack
+## Arquitetura ativa
 
-- **Backend**: FastAPI (Python 3.11+)
-- **Frontend**: Next.js 16 + React 19 + Tailwind CSS
-- **ML**: XGBoost, scikit-learn, GLiNER
-- **Database**: SQLite (dados ENEM)
+- Frontend: Next.js em `enem-analytics/frontend`
+- Backend: FastAPI em `enem-analytics/backend`
+- Autenticação: Supabase Auth
+- Banco principal: Supabase Postgres
+- Modelos e análises: scikit-learn + GLiNER
 
 ## Estrutura
 
-```
+```text
 enem-analytics/
 ├── backend/
 │   ├── api/
-│   │   ├── main.py              # FastAPI app
-│   │   └── routes/              # API endpoints
-│   ├── data/                    # Dados processados
-│   ├── ml/                      # Modelos ML
-│   └── requirements.txt
+│   ├── data/
+│   ├── ml/
+│   ├── scripts/
+│   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── app/                 # Next.js pages
-│   │   ├── components/          # React components
-│   │   └── lib/                 # Utils e API client
-│   └── package.json
+│   └── Dockerfile
 └── README.md
 ```
 
-## Deploy no Railway
-
-### Backend (FastAPI)
-
-1. Criar novo serviço no Railway
-2. Conectar ao repositório Git
-3. Configurar:
-   - **Root Directory**: `enem-analytics/backend`
-   - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `uvicorn api.main:app --host 0.0.0.0 --port $PORT`
-
-### Frontend (Next.js)
-
-1. Criar novo serviço no Railway
-2. Conectar ao repositório Git
-3. Configurar:
-   - **Root Directory**: `enem-analytics/frontend`
-   - **Build Command**: `pnpm install && pnpm build`
-   - **Start Command**: `pnpm start`
-
-4. Variáveis de ambiente:
-   ```
-   NEXT_PUBLIC_API_URL=https://seu-backend.railway.app
-   ```
-
-## Variáveis de Ambiente
+## Deploy com Docker no Coolify
 
 ### Backend
-```env
-PORT=8000
-PIONEER_API_KEY=sua_chave_pioneer  # Para BrainX/GLiNER
 
-# Autenticação (obrigatório para deploy)
-DATABASE_URL=postgresql://user:pass@host:5432/dbname
-JWT_SECRET_KEY=sua-chave-secreta-aqui
-JWT_ALGORITHM=HS256
-JWT_EXPIRE_MINUTES=10080  # 7 dias
+- Build Pack: `Dockerfile`
+- Base Directory: `/enem-analytics/backend`
+- Dockerfile Location: `/Dockerfile`
+- Port Expose: `8080`
+
+Variáveis de ambiente obrigatórias:
+
+```env
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=your-service-role-key
+```
+
+Variáveis opcionais:
+
+```env
+PIONEER_API_KEY=your-pioneer-key
+RESEND_API_KEY=your-resend-key
 ```
 
 ### Frontend
+
+- Build Pack: `Dockerfile`
+- Base Directory: `/enem-analytics/frontend`
+- Dockerfile Location: `/Dockerfile`
+- Port Expose: `3000`
+
+Variáveis de ambiente:
+
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_API_URL=https://api.rankingenem.com
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ```
 
-## Sistema de Autenticação
+`NEXT_PUBLIC_*` entra no build do Next.js. Mudou qualquer uma delas, precisa redeploy do frontend.
 
-### Criar Usuário Admin
-
-Após o deploy, execute o script para criar o primeiro admin:
-
-```bash
-cd enem-analytics/backend
-python scripts/create_admin.py admin@xtri.online senha123 "Admin X-TRI"
-```
-
-### Endpoints de Auth
-
-- `POST /api/auth/login` - Login (retorna JWT)
-- `GET /api/auth/me` - Dados do usuário logado
-
-### Endpoints de Admin (requer is_admin=true)
-
-- `GET /api/admin/users` - Listar escolas
-- `POST /api/admin/users` - Cadastrar escola
-- `PUT /api/admin/users/{id}` - Editar escola
-- `DELETE /api/admin/users/{id}` - Desativar escola
-- `GET /api/admin/stats` - Estatísticas de usuários
-
-## Desenvolvimento Local
+## Desenvolvimento local
 
 ### Backend
+
 ```bash
 cd enem-analytics/backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-prod.txt
 uvicorn api.main:app --reload --port 8000
 ```
 
 ### Frontend
+
 ```bash
 cd enem-analytics/frontend
 pnpm install
 pnpm dev
 ```
 
-## Funcionalidades
+## Autenticação
 
-- **Ranking de Escolas**: Visualização do ranking ENEM por escola
-- **Análise de Habilidades**: Comparação com média nacional
-- **Predições ML**: Projeção de notas TRI futuras
-- **Diagnóstico**: Identificação de pontos fracos
-- **Clustering**: Agrupamento por perfil de habilidades
-- **Recomendações**: Plano de melhoria personalizado
-- **BrainX Insights**: Análise inteligente com IA
+- O login é feito no frontend diretamente pelo Supabase Auth.
+- A API valida o access token do Supabase via header `Authorization: Bearer ...`.
+- O endpoint de perfil autenticado é `GET /api/auth/me`.
+- Não existe mais login JWT próprio da API.
 
-## API Endpoints
+### Bootstrap do primeiro admin
 
-### Schools
-- `GET /api/schools` - Lista escolas com filtros
-- `GET /api/schools/{codigo_inep}` - Detalhes da escola
-- `GET /api/schools/{codigo_inep}/history` - Histórico de notas
-- `GET /api/schools/{codigo_inep}/skills` - Habilidades da escola
+Opcionalmente, crie o admin inicial via script:
 
-### ML Analytics
-- `GET /api/predictions/{codigo_inep}` - Predições de notas
-- `GET /api/diagnosis/{codigo_inep}` - Diagnóstico completo
-- `GET /api/clusters/{codigo_inep}/cluster` - Cluster da escola
-- `GET /api/recommendations/{codigo_inep}` - Recomendações
+```bash
+cd enem-analytics/backend
+python scripts/create_admin.py admin@xtri.online senha123 "Admin X-TRI"
+```
 
-### BrainX
-- `GET /api/gliner/{codigo_inep}/insights` - Insights de IA
-- `GET /api/tri-lists/{codigo_inep}/{area}` - Listas TRI por área
+Pré-requisitos:
 
-## Licença
+- `SUPABASE_URL` configurada
+- `SUPABASE_SERVICE_KEY` configurada
+- tabela `profiles` já criada no Supabase
 
-Proprietário - X-TRI
+## Fluxos principais
+
+- Admin: dashboard, ranking, comparação, tendências, oráculo e gestão de usuários
+- Escola: visão da própria escola e roadmap
+
+## Endpoints principais
+
+### Auth
+
+- `GET /api/auth/me`
+
+### Admin
+
+- `GET /api/admin/users`
+- `POST /api/admin/users`
+- `PUT /api/admin/users/{user_id}`
+- `DELETE /api/admin/users/{user_id}`
+- `GET /api/admin/stats`
+
+### Core
+
+- `GET /api/schools`
+- `GET /api/schools/{codigo_inep}`
+- `GET /api/predictions/{codigo_inep}`
+- `GET /api/diagnosis/{codigo_inep}`
+- `GET /api/clusters/{codigo_inep}/cluster`
+- `GET /api/recommendations/{codigo_inep}`
+
+## Observações operacionais
+
+- Alterações de env no backend exigem redeploy do backend.
+- Alterações de env `NEXT_PUBLIC_*` exigem redeploy do frontend.
+- O frontend e o backend são deploys separados no Coolify.

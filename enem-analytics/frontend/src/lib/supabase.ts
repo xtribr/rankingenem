@@ -1,11 +1,10 @@
 /**
- * Supabase Client Configuration
- *
- * This module provides the Supabase client and auth utilities.
- * It replaces the custom JWT-based auth system.
+ * Supabase client and auth utilities for the ranking ENEM frontend.
  */
 
 import { createClient, Session } from '@supabase/supabase-js';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 // Environment variables
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -47,6 +46,15 @@ export interface User {
   created_at: string;
 }
 
+interface AuthMeResponse {
+  id: string;
+  email: string;
+  codigo_inep: string;
+  nome_escola: string;
+  is_admin: boolean;
+  is_active: boolean;
+}
+
 /**
  * Sign in with email and password
  */
@@ -84,60 +92,48 @@ export async function getSession() {
   return data.session;
 }
 
-/**
- * Fetch profile with retry logic for Supabase cold start
- */
-async function fetchProfileWithRetry(userId: string, maxRetries = 2): Promise<UserProfile | null> {
+async function fetchUserFromBackend(accessToken: string, maxRetries = 2): Promise<AuthMeResponse | null> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const timeout = attempt === 1 ? 8000 : 5000; // Longer timeout for first attempt (cold start)
-      const profilePromise = supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      const timeout = attempt === 1 ? 5000 : 3000;
+      const request = fetch(`${API_BASE}/api/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
 
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('timeout')), timeout)
       );
 
-      const { data, error } = await Promise.race([profilePromise, timeoutPromise]) as Awaited<typeof profilePromise>;
+      const response = await Promise.race([request, timeoutPromise]) as Response;
+      if (response.ok) {
+        return response.json();
+      }
 
-      if (error) {
-        console.warn(`[fetchProfile] Attempt ${attempt} error:`, error.message);
-        if (attempt < maxRetries) continue;
+      if (response.status === 401) {
         return null;
       }
-
-      console.log(`[fetchProfile] Success on attempt ${attempt}:`, data?.codigo_inep);
-      return data;
-    } catch (e) {
-      console.warn(`[fetchProfile] Attempt ${attempt} timed out`);
+    } catch {
       if (attempt < maxRetries) {
-        console.log('[fetchProfile] Retrying...');
         continue;
       }
-      return null;
     }
   }
+
   return null;
 }
 
 /**
- * Get user from session - fetches profile from database for accurate is_admin status
+ * Get user from session using the backend as the source of truth.
  */
 export async function getUserFromSession(session: Session): Promise<User | null> {
   try {
-    console.log('[getUserFromSession] Fetching profile for:', session.user.email);
-
-    // Fetch profile from database - this is the source of truth for is_admin
-    const profile = await fetchProfileWithRetry(session.user.id);
-
+    const profile = await fetchUserFromBackend(session.access_token);
     if (profile) {
-      console.log('[getUserFromSession] Profile found, is_admin:', profile.is_admin);
       return {
-        id: session.user.id,
-        email: session.user.email || '',
+        id: profile.id,
+        email: profile.email || session.user.email || '',
         codigo_inep: profile.codigo_inep || '',
         nome_escola: profile.nome_escola || '',
         is_admin: profile.is_admin || false,
@@ -146,8 +142,6 @@ export async function getUserFromSession(session: Session): Promise<User | null>
       };
     }
 
-    // Fallback to user_metadata if profile not found
-    console.warn('[getUserFromSession] Profile not found, falling back to user_metadata');
     return {
       id: session.user.id,
       email: session.user.email || '',
@@ -158,7 +152,7 @@ export async function getUserFromSession(session: Session): Promise<User | null>
       created_at: session.user.created_at,
     };
   } catch (error) {
-    console.error('[getUserFromSession] Unexpected error:', error);
+    console.error('Erro ao obter usuário a partir da sessão:', error);
     return null;
   }
 }
@@ -168,9 +162,6 @@ export async function getUserFromSession(session: Session): Promise<User | null>
  */
 export async function getCurrentUser(): Promise<User | null> {
   try {
-    console.log('[getCurrentUser] Getting session...');
-
-    // Add timeout to getSession to prevent hanging
     const sessionPromise = supabase.auth.getSession();
     const sessionTimeout = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('Session fetch timeout')), 5000)
@@ -181,22 +172,21 @@ export async function getCurrentUser(): Promise<User | null> {
       const result = await Promise.race([sessionPromise, sessionTimeout]);
       session = result.data?.session;
       if (result.error) {
-        console.error('[getCurrentUser] Session error:', result.error);
+        console.error('Erro ao buscar sessão:', result.error);
         return null;
       }
     } catch {
-      console.warn('[getCurrentUser] Session fetch timed out');
+      console.warn('Tempo esgotado ao buscar sessão');
       return null;
     }
 
     if (!session?.user) {
-      console.log('[getCurrentUser] No session');
       return null;
     }
 
     return getUserFromSession(session);
   } catch (error) {
-    console.error('[getCurrentUser] Unexpected error:', error);
+    console.error('Erro inesperado ao buscar usuário atual:', error);
     return null;
   }
 }

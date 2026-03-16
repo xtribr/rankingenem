@@ -7,12 +7,13 @@ FastAPI backend for ENEM school data analysis and predictions
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from api.routes import schools, predictions, diagnosis, clusters, recommendations, tri_lists, gliner_insights, contact, oracle
 from api.auth import router as auth_router
+from api.auth.supabase_dependencies import UserProfile, get_current_admin
 from api.admin import router as admin_router
 from data.supabase_store import init_database as init_supabase
 
@@ -88,12 +89,14 @@ async def root():
 
 @app.get("/health")
 async def health():
-    """Health check endpoint for Railway"""
+    """Health check endpoint for container orchestration."""
     return {"status": "healthy", "service": "enem-analytics-api"}
 
 
 @app.get("/api/stats")
-async def get_stats_endpoint():
+async def get_stats_endpoint(
+    _: UserProfile = Depends(get_current_admin),
+):
     """Get general statistics"""
     from data.supabase_store import get_stats
     return get_stats()

@@ -1,8 +1,4 @@
-"""
-Supabase Authentication Service
-
-Replaces JWT-based authentication with Supabase Auth.
-"""
+"""Supabase authentication service for the FastAPI backend."""
 
 import os
 from typing import Optional
@@ -14,7 +10,6 @@ logger = logging.getLogger(__name__)
 # Supabase configuration
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
 
 # Lazy-loaded Supabase client
 _supabase_client = None
@@ -118,6 +113,10 @@ def authenticate_with_token(access_token: str) -> Optional[UserProfile]:
 
     # Get profile data
     profile = get_user_profile(user_data["id"])
+    if profile:
+        profile.email = user_data.get("email") or profile.email
+        return profile
+
     if not profile:
         # Create profile from user metadata if missing
         metadata = user_data.get("user_metadata", {})

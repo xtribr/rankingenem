@@ -3,7 +3,7 @@ Clustering API endpoints for ENEM Analytics
 School personas and similar schools
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
 import sys
 from pathlib import Path
@@ -12,6 +12,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from ml.clustering_model import SchoolClusteringModel
+from api.auth.authorization import get_authorized_school_user
+from api.auth.supabase_dependencies import UserProfile, get_current_admin
 
 router = APIRouter(prefix="/api/clusters", tags=["clusters"])
 
@@ -33,7 +35,9 @@ def get_clustering_model() -> SchoolClusteringModel:
 
 
 @router.get("/personas")
-async def get_all_personas():
+async def get_all_personas(
+    _: UserProfile = Depends(get_current_admin),
+):
     """
     Get all school personas (cluster descriptions)
 
@@ -47,7 +51,9 @@ async def get_all_personas():
 
 
 @router.get("/train")
-async def train_model():
+async def train_model(
+    _: UserProfile = Depends(get_current_admin),
+):
     """
     Train or retrain the clustering model
 
@@ -64,7 +70,10 @@ async def train_model():
 
 
 @router.get("/{codigo_inep}/cluster")
-async def get_school_cluster(codigo_inep: str):
+async def get_school_cluster(
+    codigo_inep: str,
+    _: UserProfile = Depends(get_authorized_school_user),
+):
     """
     Get cluster/persona for a specific school
 
@@ -88,7 +97,8 @@ async def get_school_cluster(codigo_inep: str):
 async def get_similar_schools(
     codigo_inep: str,
     limit: int = Query(10, ge=1, le=50),
-    same_cluster: bool = Query(True)
+    same_cluster: bool = Query(True),
+    _: UserProfile = Depends(get_authorized_school_user),
 ):
     """
     Find schools similar to the given school
@@ -121,7 +131,8 @@ async def get_similar_schools(
 async def get_similar_improved_schools(
     codigo_inep: str,
     limit: int = Query(10, ge=1, le=50),
-    min_improvement: float = Query(10.0, ge=0)
+    min_improvement: float = Query(10.0, ge=0),
+    _: UserProfile = Depends(get_authorized_school_user),
 ):
     """
     Find similar schools that improved significantly
@@ -156,7 +167,9 @@ async def get_similar_improved_schools(
 
 
 @router.get("/stats")
-async def get_cluster_stats():
+async def get_cluster_stats(
+    _: UserProfile = Depends(get_current_admin),
+):
     """
     Get statistics about the clustering
 

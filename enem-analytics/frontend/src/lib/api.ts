@@ -3,11 +3,6 @@ import { supabase } from './supabase';
 // API URL from environment variable (Fly.io backend - updated)
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-// Debug log
-if (typeof window !== 'undefined') {
-  console.log('[API_BASE]', API_BASE);
-}
-
 // User type for admin APIs
 export interface User {
   id: string;
@@ -459,7 +454,6 @@ async function getSessionWithRetry(maxAttempts = 2): Promise<string | null> {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const timeoutMs = attempt === 1 ? 8000 : 5000; // Longer first attempt for cold start
-      console.log(`[getSession] Attempt ${attempt}...`);
 
       const sessionPromise = supabase.auth.getSession();
       const timeoutPromise = new Promise<never>((_, reject) =>
@@ -468,31 +462,22 @@ async function getSessionWithRetry(maxAttempts = 2): Promise<string | null> {
       const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
 
       if (session?.access_token) {
-        console.log(`[getSession] Success on attempt ${attempt}`);
         return session.access_token;
       }
-      console.warn(`[getSession] No token on attempt ${attempt}`);
       return null;
     } catch {
-      console.warn(`[getSession] Attempt ${attempt} timed out`);
       if (attempt < maxAttempts) {
-        console.log('[getSession] Retrying...');
         continue;
       }
     }
   }
-  console.error('[getSession] All attempts failed');
   return null;
 }
 
 async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  console.log(`[fetchAPI] ${options?.method || 'GET'} ${endpoint}`);
-
-  // Get token from Supabase session with retry
   const token = await getSessionWithRetry();
 
   if (!token) {
-    console.error('[fetchAPI] No auth token available');
     throw new Error('Não foi possível obter sessão. Tente recarregar a página.');
   }
 
@@ -507,11 +492,7 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
       headers,
     });
 
-    console.log(`[fetchAPI] Response: ${response.status}`);
-
     if (response.status === 401) {
-      // Sign out from Supabase and redirect to login
-      console.warn('[fetchAPI] 401 - signing out');
       await supabase.auth.signOut();
       if (typeof window !== 'undefined') {
         window.location.href = '/login';
@@ -520,7 +501,6 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
     }
 
     if (!response.ok) {
-      // Try to get error message from response
       let errorMessage = `Erro: ${response.status}`;
       try {
         const errorData = await response.json();
@@ -530,24 +510,69 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
       } catch {
         // Ignore JSON parse errors
       }
-      console.error(`[fetchAPI] Error: ${errorMessage}`);
       throw new Error(errorMessage);
     }
 
-    // Handle 204 No Content (for DELETE operations)
     if (response.status === 204) {
-      console.log('[fetchAPI] 204 No Content - success');
       return undefined as T;
     }
 
     return response.json();
   } catch (error) {
     if (error instanceof Error && error.message.includes('fetch')) {
-      console.error('[fetchAPI] Network error:', error);
       throw new Error('Erro de conexão. Verifique sua internet.');
     }
     throw error;
   }
+}
+
+async function downloadAuthenticatedFile(endpoint: string): Promise<void> {
+  const token = await getSessionWithRetry();
+
+  if (!token) {
+    throw new Error('Não foi possível obter sessão. Tente recarregar a página.');
+  }
+
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (response.status === 401) {
+    await supabase.auth.signOut();
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
+    throw new Error('Sessão expirada');
+  }
+
+  if (!response.ok) {
+    let errorMessage = `Erro: ${response.status}`;
+    try {
+      const errorData = await response.json();
+      if (errorData.detail) {
+        errorMessage = errorData.detail;
+      }
+    } catch {
+      // Ignore JSON parse errors for file responses.
+    }
+    throw new Error(errorMessage);
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get('Content-Disposition');
+  const filenameMatch = disposition?.match(/filename="?([^"]+)"?/i);
+  const filename = filenameMatch?.[1] || 'download.csv';
+
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = downloadUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(downloadUrl);
 }
 
 export const api = {
@@ -914,6 +939,9 @@ export const api = {
   // Export improvement plan as CSV
   getExportPlanUrl: (codigo_inep: string) =>
     `${API_BASE}/api/tri-lists/export/plano/${codigo_inep}`,
+
+  downloadExportPlan: (codigo_inep: string) =>
+    downloadAuthenticatedFile(`/api/tri-lists/export/plano/${codigo_inep}`),
 
   // GLiNER Enhanced Insights
   getGlinerConceptAnalysis: (codigo_inep: string, topN?: number) =>

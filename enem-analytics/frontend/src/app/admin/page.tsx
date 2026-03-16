@@ -16,15 +16,20 @@ interface AdminStats {
 
 export default function AdminPage() {
   const router = useRouter();
-  const { user, isLoading, isAdmin } = useAuth();
+  const { user, session, isLoading, isAdmin } = useAuth();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
 
   useEffect(() => {
-    if (!isLoading && !isAdmin) {
+    if (!isLoading && !session) {
+      router.push('/login');
+      return;
+    }
+
+    if (!isLoading && user && !isAdmin) {
       router.push('/');
     }
-  }, [isLoading, isAdmin, router]);
+  }, [isLoading, isAdmin, router, session, user]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -35,12 +40,16 @@ export default function AdminPage() {
     }
   }, [isAdmin]);
 
-  if (isLoading || !isAdmin) {
+  if (isLoading || (session && !user)) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="h-8 w-8 border-4 border-sky-400 border-t-transparent rounded-full animate-spin" />
       </div>
     );
+  }
+
+  if (!session || !user || !isAdmin) {
+    return null;
   }
 
   const statCards = [

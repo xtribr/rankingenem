@@ -11,21 +11,22 @@ import { LogOut, School } from 'lucide-react';
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, isAuthenticated, isAdmin, isLoading, logout } = useAuth();
+  const { user, session, isAdmin, isLoading, logout } = useAuth();
   const { collapsed } = useSidebar();
   const isLoginPage = pathname === '/login';
 
   useEffect(() => {
-    // Don't redirect while loading or on login page
     if (isLoading || isLoginPage) return;
 
-    // Redirect to login if not authenticated
-    if (!isAuthenticated) {
+    if (!session) {
       router.push('/login');
       return;
     }
 
-    // For non-admin users, redirect to their school page
+    if (!user) {
+      return;
+    }
+
     if (!isAdmin && user?.codigo_inep) {
       const allowedPaths = [
         `/schools/${user.codigo_inep}`,
@@ -37,14 +38,13 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         router.push(`/schools/${user.codigo_inep}`);
       }
     }
-  }, [isLoading, isAuthenticated, isAdmin, user, pathname, router, isLoginPage]);
+  }, [isLoading, isAdmin, isLoginPage, pathname, router, session, user]);
 
   if (isLoginPage) {
     return <>{children}</>;
   }
 
-  // Show loading while checking auth
-  if (isLoading) {
+  if (isLoading || (session && !user)) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-50">
         <div className="h-8 w-8 border-4 border-sky-400 border-t-transparent rounded-full animate-spin" />
@@ -52,8 +52,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     );
   }
 
-  // Don't render anything if not authenticated (will redirect)
-  if (!isAuthenticated) {
+  if (!session) {
     return null;
   }
 

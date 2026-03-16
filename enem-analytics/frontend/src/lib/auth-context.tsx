@@ -1,11 +1,5 @@
 'use client';
 
-/**
- * Auth Context - Supabase Version
- *
- * Provides authentication state and methods using Supabase Auth.
- */
-
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { supabase, User, getCurrentUser, getUserFromSession, signIn, signOut } from './supabase';
 import type { Session } from '@supabase/supabase-js';
@@ -28,33 +22,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Refresh user using existing session to avoid re-fetching
   const refreshUserFromSession = useCallback(async (currentSession: Session | null) => {
-    console.log('[AuthContext] refreshUserFromSession called');
     if (!currentSession) {
-      console.log('[AuthContext] No session provided');
       setUser(null);
       return;
     }
     try {
       const currentUser = await getUserFromSession(currentSession);
-      console.log('[AuthContext] getUserFromSession returned:', currentUser?.email || 'null');
       setUser(currentUser);
     } catch (error) {
-      console.error('[AuthContext] Failed to refresh user:', error);
+      console.error('Falha ao atualizar usuário da sessão:', error);
       setUser(null);
     }
   }, []);
 
-  // Legacy refresh - fetches session first (for manual refresh)
   const refreshUser = useCallback(async () => {
-    console.log('[AuthContext] refreshUser called (legacy)');
     try {
       const currentUser = await getCurrentUser();
-      console.log('[AuthContext] getCurrentUser returned:', currentUser?.email || 'null');
       setUser(currentUser);
     } catch (error) {
-      console.error('[AuthContext] Failed to refresh user:', error);
+      console.error('Falha ao recarregar usuário:', error);
       setUser(null);
     }
   }, []);
@@ -63,28 +50,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true;
     let initialLoadDone = false;
 
-    console.log('[AuthContext] Initializing...');
-
-    // Listen for auth changes - handles BOTH initial load and subsequent changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, newSession) => {
         if (!mounted) return;
-        console.log('[AuthContext] Auth state changed:', event);
         setSession(newSession);
 
-        // Handle initial session or sign in
         if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          // Prevent duplicate fetches - only skip if we already loaded a valid user
           if (event === 'SIGNED_IN' && initialLoadDone && newSession) {
-            console.log('[AuthContext] Skipping duplicate SIGNED_IN');
             return;
           }
 
-          console.log('[AuthContext] Loading user for', event);
           await refreshUserFromSession(newSession);
-          console.log('[AuthContext] User loaded');
-
-          // Only mark as done if we actually had a session
           if (newSession) {
             initialLoadDone = true;
           }
@@ -108,16 +84,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        throw new Error(error.message === 'Invalid login credentials'
-          ? 'Email ou senha incorretos'
-          : error.message);
-      }
-      // User will be set by onAuthStateChange
+      await signIn(email, password);
     } catch (error) {
       setIsLoading(false);
-      throw error;
+      if (error instanceof Error && error.message === 'Invalid login credentials') {
+        throw new Error('Email ou senha incorretos');
+      }
+      throw error instanceof Error ? error : new Error('Erro ao fazer login');
     }
   };
 

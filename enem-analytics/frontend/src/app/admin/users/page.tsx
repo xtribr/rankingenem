@@ -361,7 +361,7 @@ function UserModal({
 
 export default function UsersPage() {
   const router = useRouter();
-  const { isLoading: authLoading, isAdmin } = useAuth();
+  const { session, user, isLoading: authLoading, isAdmin } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -370,10 +370,15 @@ export default function UsersPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!authLoading && !isAdmin) {
+    if (!authLoading && !session) {
+      router.push('/login');
+      return;
+    }
+
+    if (!authLoading && user && !isAdmin) {
       router.push('/');
     }
-  }, [authLoading, isAdmin, router]);
+  }, [authLoading, isAdmin, router, session, user]);
 
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -400,21 +405,15 @@ export default function UsersPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const handleDelete = async (userId: string) => {
-    console.log('[handleDelete] User clicked delete for:', userId);
     if (!confirm('Deseja realmente desativar este usuário?')) {
-      console.log('[handleDelete] User cancelled');
       return;
     }
 
-    console.log('[handleDelete] Starting delete...');
     setDeleteError(null);
     setDeletingId(userId);
     try {
-      console.log('[handleDelete] Calling api.deleteUser...');
       await api.deleteUser(userId);
-      console.log('[handleDelete] Delete successful, reloading users...');
       await loadUsers();
-      console.log('[handleDelete] Users reloaded');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erro ao desativar usuário';
       console.error('[handleDelete] Error:', error);
@@ -423,7 +422,6 @@ export default function UsersPage() {
       setTimeout(() => setDeleteError(null), 10000);
     } finally {
       setDeletingId(null);
-      console.log('[handleDelete] Done');
     }
   };
 
@@ -434,12 +432,16 @@ export default function UsersPage() {
       user.codigo_inep.includes(search)
   );
 
-  if (authLoading || !isAdmin) {
+  if (authLoading || (session && !user)) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="h-8 w-8 border-4 border-sky-400 border-t-transparent rounded-full animate-spin" />
       </div>
     );
+  }
+
+  if (!session || !user || !isAdmin) {
+    return null;
   }
 
   return (

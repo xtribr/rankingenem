@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { api, API_BASE } from '@/lib/api';
@@ -39,6 +40,7 @@ import {
 export default function RoadmapPage() {
   const params = useParams();
   const codigo_inep = params.codigo_inep as string;
+  const [isExporting, setIsExporting] = useState(false);
 
   const { data: school } = useQuery({
     queryKey: ['school', codigo_inep],
@@ -117,6 +119,15 @@ export default function RoadmapPage() {
     { name: 'Progresso', value: progressPercent, fill: '#3B82F6' },
   ];
 
+  const handleExportPlan = async () => {
+    setIsExporting(true);
+    try {
+      await api.downloadExportPlan(codigo_inep);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Page Header */}
@@ -144,14 +155,15 @@ export default function RoadmapPage() {
                 </span>
               )}
               <span className="text-sm text-slate-500">INEP: {codigo_inep}</span>
-              <a
-                href={api.getExportPlanUrl(codigo_inep)}
-                download
+              <button
+                type="button"
+                onClick={handleExportPlan}
+                disabled={isExporting}
                 className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
               >
                 <Download className="h-4 w-4" />
-                Exportar Plano CSV
-              </a>
+                {isExporting ? 'Exportando...' : 'Exportar Plano CSV'}
+              </button>
             </div>
           </div>
         </div>

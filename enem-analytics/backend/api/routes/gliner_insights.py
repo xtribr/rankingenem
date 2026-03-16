@@ -16,7 +16,10 @@ from typing import Dict, List, Any, Optional, Tuple, Set
 from collections import Counter
 from difflib import SequenceMatcher
 import pandas as pd
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from api.auth.authorization import get_authorized_school_user
+from api.auth.supabase_dependencies import UserProfile, get_current_admin
 
 
 def levenshtein_ratio(s1: str, s2: str) -> float:
@@ -162,7 +165,8 @@ ENTITY_COLUMNS = {
 @router.get("/school/{codigo_inep}/concepts")
 async def get_school_concept_analysis(
     codigo_inep: str,
-    top_n: int = Query(20, ge=5, le=100)
+    top_n: int = Query(20, ge=5, le=100),
+    _: UserProfile = Depends(get_authorized_school_user),
 ) -> Dict[str, Any]:
     """
     Get comprehensive concept analysis for a school based on their performance gaps.
@@ -332,7 +336,8 @@ async def get_school_concept_analysis(
 @router.get("/school/{codigo_inep}/knowledge-graph")
 async def get_knowledge_graph(
     codigo_inep: str,
-    area: Optional[str] = Query(None, regex="^(CN|CH|LC|MT)$")
+    area: Optional[str] = Query(None, regex="^(CN|CH|LC|MT)$"),
+    _: UserProfile = Depends(get_authorized_school_user),
 ) -> Dict[str, Any]:
     """
     Get knowledge graph data showing relationships between concepts, themes, and skills.
@@ -676,7 +681,8 @@ async def get_knowledge_graph(
 @router.get("/school/{codigo_inep}/skill-concepts")
 async def get_skill_concept_mapping(
     codigo_inep: str,
-    area: Optional[str] = Query(None, regex="^(CN|CH|LC|MT)$")
+    area: Optional[str] = Query(None, regex="^(CN|CH|LC|MT)$"),
+    _: UserProfile = Depends(get_authorized_school_user),
 ) -> Dict[str, Any]:
     """
     Get mapping between ENEM skills and GLiNER-extracted concepts.
@@ -797,7 +803,10 @@ async def get_skill_concept_mapping(
 
 
 @router.get("/school/{codigo_inep}/study-focus")
-async def get_study_focus(codigo_inep: str) -> Dict[str, Any]:
+async def get_study_focus(
+    codigo_inep: str,
+    _: UserProfile = Depends(get_authorized_school_user),
+) -> Dict[str, Any]:
     """
     Get personalized study focus based on GLiNER analysis.
 
@@ -958,7 +967,8 @@ async def get_study_focus(codigo_inep: str) -> Dict[str, Any]:
 @router.get("/global/trending-concepts")
 async def get_trending_concepts(
     area: Optional[str] = Query(None, regex="^(CN|CH|LC|MT)$"),
-    limit: int = Query(30, ge=10, le=100)
+    limit: int = Query(30, ge=10, le=100),
+    _: UserProfile = Depends(get_current_admin),
 ) -> Dict[str, Any]:
     """
     Get trending/most important concepts across all content.
