@@ -81,6 +81,7 @@ export default function LoginPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="username"
                   required
                   className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20 outline-none transition-all text-gray-900"
                   placeholder="seu@email.com"
@@ -98,6 +99,7 @@ export default function LoginPage() {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
                   required
                   className="w-full pl-10 pr-12 py-3 rounded-xl border border-gray-200 focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20 outline-none transition-all text-gray-900"
                   placeholder="Sua senha"

@@ -281,6 +281,62 @@ export interface RoadmapResult {
   success_stories: SuccessStory[];
 }
 
+export interface OraclePrediction {
+  rank: number;
+  area: string;
+  area_codigo?: string;
+  tema: string;
+  habilidades: string[];
+  habilidades_matriz?: Array<{
+    codigo: string;
+    habilidade: string;
+    descricao: string;
+    competencia: number;
+    competencia_descricao: string;
+    relevancia?: number;
+  }>;
+  objetos_conhecimento?: Array<{
+    tema: string;
+    sub_area?: string;
+    descricao?: string;
+    conteudos: string[];
+    relevancia: number;
+  }>;
+  eixos_cognitivos?: Array<{
+    codigo: string;
+    nome: string;
+    descricao: string;
+    relevancia: number;
+  }>;
+  probabilidade: number;
+  tipo: string;
+  justificativa: string;
+  base_cientifica?: {
+    questoes_historicas: number;
+    total_area: number;
+    frequencia_percentual: number;
+    tri_medio: number;
+    habilidades_historicas: string[];
+    fonte: string;
+  };
+  exemplos_questoes?: string[];
+}
+
+export interface OracleResponse {
+  total: number;
+  ano_predicao: number;
+  gerado_em: string;
+  modelo: string;
+  versao: string;
+  predicoes: OraclePrediction[];
+  metodologia?: {
+    descricao: string;
+    fonte_dados: string;
+    transparencia: string;
+    limitacoes: string[];
+  };
+}
+
 // Diagnosis Comparison Types
 export interface DiagnosisComparisonArea {
   area: string;
@@ -686,6 +742,15 @@ export const api = {
 
   getAreaProjection: (codigo_inep: string, area: string) =>
     fetchAPI<TRIAreaProjection>(`/api/predictions/${codigo_inep}/area-projection/${area}`),
+
+  getOraclePredictions: (filters?: { area?: string; tipo?: string; limit?: number }) => {
+    const searchParams = new URLSearchParams();
+    if (filters?.area) searchParams.set('area', filters.area);
+    if (filters?.tipo) searchParams.set('tipo', filters.tipo);
+    if (typeof filters?.limit === 'number') searchParams.set('limit', String(filters.limit));
+    const query = searchParams.toString();
+    return fetchAPI<OracleResponse>(`/api/oracle/predictions${query ? `?${query}` : ''}`);
+  },
 
   // ML APIs - Diagnosis
   getDiagnosis: (codigo_inep: string) =>
