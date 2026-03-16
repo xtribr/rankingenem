@@ -1,9 +1,11 @@
 """Supabase authentication service for the FastAPI backend."""
 
-import os
-from typing import Optional
-from dataclasses import dataclass
 import logging
+import os
+from dataclasses import dataclass
+from typing import Optional
+
+from jose import JWTError, jwt
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +68,50 @@ def verify_token(access_token: str) -> Optional[dict]:
         return None
 
 
+def get_claims_from_token(access_token: str) -> dict:
+    """Read JWT claims without verification for fallback metadata extraction."""
+    try:
+        return jwt.get_unverified_claims(access_token)
+    except JWTError as e:
+        logger.warning(f"Failed to decode access token claims: {e}")
+        return {}
+
+
+def get_auth_user_email(user_id: str) -> str:
+    """Fetch the canonical email from Supabase Auth admin APIs."""
+    try:
+        supabase = get_supabase()
+        user_response = supabase.auth.admin.get_user_by_id(user_id)
+        if user_response and getattr(user_response, "user", None):
+            return user_response.user.email or ""
+    except Exception as e:
+        logger.warning(f"Failed to fetch auth user email for {user_id}: {e}")
+    return ""
+
+
+def resolve_user_email(
+    user_id: str,
+    *,
+    profile_email: str = "",
+    token_email: str = "",
+    access_token: Optional[str] = None,
+) -> str:
+    """Resolve email from the most reliable available sources."""
+    if token_email:
+        return token_email
+
+    if access_token:
+        claims = get_claims_from_token(access_token)
+        claim_email = claims.get("email")
+        if isinstance(claim_email, str) and claim_email:
+            return claim_email
+
+    if profile_email:
+        return profile_email
+
+    return get_auth_user_email(user_id)
+
+
 def get_user_profile(user_id: str) -> Optional[UserProfile]:
     """
     Get user profile from profiles table.
@@ -85,7 +131,10 @@ def get_user_profile(user_id: str) -> Optional[UserProfile]:
 
         return UserProfile(
             id=result.data["id"],
-            email=result.data.get("email", ""),
+            email=resolve_user_email(
+                result.data["id"],
+                profile_email=result.data.get("email", ""),
+            ),
             codigo_inep=result.data["codigo_inep"],
             nome_escola=result.data["nome_escola"],
             is_admin=result.data.get("is_admin", False),
@@ -114,7 +163,12 @@ def authenticate_with_token(access_token: str) -> Optional[UserProfile]:
     # Get profile data
     profile = get_user_profile(user_data["id"])
     if profile:
-        profile.email = user_data.get("email") or profile.email
+        profile.email = resolve_user_email(
+            user_data["id"],
+            profile_email=profile.email,
+            token_email=user_data.get("email", ""),
+            access_token=access_token,
+        )
         return profile
 
     if not profile:
@@ -122,7 +176,11 @@ def authenticate_with_token(access_token: str) -> Optional[UserProfile]:
         metadata = user_data.get("user_metadata", {})
         profile = UserProfile(
             id=user_data["id"],
-            email=user_data["email"],
+            email=resolve_user_email(
+                user_data["id"],
+                token_email=user_data.get("email", ""),
+                access_token=access_token,
+            ),
             codigo_inep=metadata.get("codigo_inep", ""),
             nome_escola=metadata.get("nome_escola", ""),
             is_admin=metadata.get("is_admin", False)
@@ -191,7 +249,10 @@ def list_all_profiles(skip: int = 0, limit: int = 100) -> list[UserProfile]:
         return [
             UserProfile(
                 id=row["id"],
-                email=row.get("email", ""),
+                email=resolve_user_email(
+                    row["id"],
+                    profile_email=row.get("email", ""),
+                ),
                 codigo_inep=row["codigo_inep"],
                 nome_escola=row["nome_escola"],
                 is_admin=row.get("is_admin", False),

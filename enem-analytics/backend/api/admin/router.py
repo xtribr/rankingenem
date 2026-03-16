@@ -1,10 +1,10 @@
 """Admin routes for user management - Supabase version"""
-from typing import List, Optional
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
 
 from api.auth.supabase_dependencies import get_current_admin, UserProfile
-from api.auth.supabase_service import get_supabase, list_all_profiles, update_profile
+from api.auth.supabase_service import get_supabase, get_user_profile, list_all_profiles, update_profile
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
@@ -40,6 +40,7 @@ async def list_users(
             "id": p.id,
             "codigo_inep": p.codigo_inep,
             "nome_escola": p.nome_escola,
+            "email": p.email,
             "is_admin": p.is_admin,
             "is_active": p.is_active,
         }
@@ -56,16 +57,21 @@ async def get_user(
     Get a specific user by ID.
     Requires admin privileges.
     """
-    supabase = get_supabase()
-    result = supabase.table("profiles").select("*").eq("id", user_id).single().execute()
-
-    if not result.data:
+    profile = get_user_profile(user_id)
+    if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Usuário não encontrado"
         )
 
-    return result.data
+    return {
+        "id": profile.id,
+        "codigo_inep": profile.codigo_inep,
+        "nome_escola": profile.nome_escola,
+        "email": profile.email,
+        "is_admin": profile.is_admin,
+        "is_active": profile.is_active,
+    }
 
 
 @router.post("/users", status_code=status.HTTP_201_CREATED)
@@ -115,7 +121,18 @@ async def create_user(
             "is_admin": user_data.is_admin
         }).execute()
 
-        return profile_result.data[0] if profile_result.data else {"id": user_id}
+        created_profile = get_user_profile(user_id)
+        if created_profile:
+            return {
+                "id": created_profile.id,
+                "codigo_inep": created_profile.codigo_inep,
+                "nome_escola": created_profile.nome_escola,
+                "email": created_profile.email,
+                "is_admin": created_profile.is_admin,
+                "is_active": created_profile.is_active,
+            }
+
+        return {"id": user_id, "email": user_data.email}
 
     except Exception as e:
         if "already registered" in str(e).lower():
@@ -172,6 +189,7 @@ async def update_user_endpoint(
         "id": updated.id,
         "codigo_inep": updated.codigo_inep,
         "nome_escola": updated.nome_escola,
+        "email": updated.email,
         "is_admin": updated.is_admin,
         "is_active": updated.is_active,
     }
