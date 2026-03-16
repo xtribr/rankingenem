@@ -88,11 +88,44 @@ export interface Stats {
 }
 
 // ML Types - Predictions
+export interface PredictionInterval {
+  low: number;
+  high: number;
+}
+
+export interface PredictionAreaPresentation {
+  current_score: number;
+  raw_score: number;
+  display_score: number;
+  confidence_interval: PredictionInterval;
+  raw_confidence_interval: PredictionInterval;
+  display_mode: 'delta' | 'range';
+  risk_level: 'normal' | 'conservative' | 'outlier';
+  risk_reason?: string | null;
+  badge_text?: string | null;
+  historical_corridor: PredictionInterval;
+  raw_expected_change: number;
+  display_expected_change: number;
+  model_info: Record<string, unknown>;
+}
+
 export interface PredictionResult {
   codigo_inep: string;
   target_year: number;
   scores: Record<string, number>;
-  confidence_intervals: Record<string, { low: number; high: number }>;
+  raw_scores: Record<string, number>;
+  display_scores: Record<string, number>;
+  current_scores: Record<string, number>;
+  expected_change: Record<string, number>;
+  raw_expected_change: Record<string, number>;
+  confidence_intervals: Record<string, PredictionInterval>;
+  raw_confidence_intervals: Record<string, PredictionInterval>;
+  display_modes: Record<string, 'delta' | 'range'>;
+  risk_levels: Record<string, 'normal' | 'conservative' | 'outlier'>;
+  risk_reasons: Record<string, string | null | undefined>;
+  badge_texts: Record<string, string | null | undefined>;
+  historical_corridors: Record<string, PredictionInterval>;
+  areas: Record<string, PredictionAreaPresentation>;
   model_info: Record<string, unknown>;
 }
 
@@ -105,9 +138,15 @@ export interface PredictionComparison {
   predicted: {
     year: number;
     scores: Record<string, number>;
+    raw_scores: Record<string, number>;
+    display_scores: Record<string, number>;
   };
   expected_change: Record<string, number>;
-  confidence_intervals: Record<string, { low: number; high: number }>;
+  raw_expected_change: Record<string, number>;
+  confidence_intervals: Record<string, PredictionInterval>;
+  raw_confidence_intervals: Record<string, PredictionInterval>;
+  areas: Record<string, PredictionAreaPresentation>;
+  model_info: Record<string, unknown>;
 }
 
 // ML Types - Diagnosis
@@ -390,8 +429,20 @@ export interface TRIAreaAnalysis {
   area_name: string;
   color: string;
   current_score: number;
+  raw_score: number;
+  display_score: number;
   predicted_score: number;
+  raw_expected_change: number;
+  display_expected_change: number;
   expected_change: number;
+  confidence_interval: PredictionInterval;
+  raw_confidence_interval: PredictionInterval;
+  display_mode: 'delta' | 'range';
+  risk_level: 'normal' | 'conservative' | 'outlier';
+  risk_reason?: string | null;
+  badge_text?: string | null;
+  historical_corridor?: PredictionInterval;
+  model_info: Record<string, unknown>;
   tri_mastery_level: number;
   tri_gap_to_median: number;
   tri_potential: number;
@@ -478,6 +529,22 @@ export interface TRIAreaProjection {
       high: number;
     };
     potential_gain: number;
+  };
+  official_prediction: {
+    target_year: number;
+    current_score: number;
+    raw_score: number;
+    display_score: number;
+    confidence_interval: PredictionInterval;
+    raw_confidence_interval: PredictionInterval;
+    display_mode: 'delta' | 'range';
+    risk_level: 'normal' | 'conservative' | 'outlier';
+    risk_reason?: string | null;
+    badge_text?: string | null;
+    historical_corridor: PredictionInterval;
+    raw_expected_change: number;
+    display_expected_change: number;
+    model_info: Record<string, unknown>;
   };
   insights: TRIProjectionInsight[];
 }

@@ -439,75 +439,187 @@ class ENEMPreprocessor:
         features.update(self.create_trend_features(school_df))
         features.update(self.create_school_features(school_df))
         features.update(self.create_skill_aggregate_features(codigo_inep))
-
-        # NEW: Add TRI-based features
+        features.update(self.create_bayesian_consistency_features(school_df))
         features.update(self.create_tri_based_features(school_df))
         features.update(self.create_skill_gap_features(school_df))
 
         return features
 
+    def create_bayesian_consistency_features(self, school_df: pd.DataFrame) -> Dict[str, float]:
+        """
+        Create Bayesian-inspired consistency features that capture the school's
+        cognitive pattern — how stable and predictable the school's performance is.
+
+        A school like Farias Brito that has been #1 for 7 years has a strong prior
+        that should resist regression to the mean in predictions.
+
+        Args:
+            school_df: DataFrame with school's historical data (sorted by year)
+
+        Returns:
+            Dictionary of Bayesian consistency features
+        """
+        features = {}
+        score_cols = ['nota_cn', 'nota_ch', 'nota_lc', 'nota_mt', 'nota_redacao', 'nota_media']
+        school_df = school_df.sort_values('ano')
+
+        n_years = len(school_df)
+        features['n_years_history'] = n_years
+
+        for col in score_cols:
+            col_short = col.replace('nota_', '')
+            values = school_df[col].dropna().values
+
+            if len(values) >= 2:
+                mean_score = np.mean(values)
+                std_score = np.std(values)
+
+                # Bayesian prior strength: more years + lower variance = stronger prior
+                # High consistency = prediction should stay close to historical mean
+                prior_strength = len(values) / (1 + std_score / max(mean_score, 1))
+                features[f'bayesian_prior_strength_{col_short}'] = prior_strength
+
+                # Coefficient of variation (lower = more consistent)
+                features[f'cv_{col_short}'] = std_score / max(mean_score, 1)
+
+                # Historical mean (strong predictor for consistent schools)
+                features[f'historical_mean_{col_short}'] = mean_score
+
+                # Historical min and max (defines the school's "range")
+                features[f'historical_min_{col_short}'] = np.min(values)
+                features[f'historical_max_{col_short}'] = np.max(values)
+
+                # Percentile rank among all schools (latest year)
+                # This captures the "tier" of the school
+                latest_score = values[-1]
+                all_latest = self.df[self.df['ano'] == school_df['ano'].max()][col].dropna()
+                if len(all_latest) > 0:
+                    percentile = (all_latest < latest_score).mean() * 100
+                    features[f'percentile_rank_{col_short}'] = percentile
+                else:
+                    features[f'percentile_rank_{col_short}'] = 50
+
+                # Consecutive years above national mean
+                national_mean = self.df[col].mean()
+                consecutive_above = 0
+                for v in reversed(values):
+                    if v > national_mean:
+                        consecutive_above += 1
+                    else:
+                        break
+                features[f'consecutive_above_mean_{col_short}'] = consecutive_above
+
+            else:
+                features[f'bayesian_prior_strength_{col_short}'] = 0
+                features[f'cv_{col_short}'] = 1
+                features[f'historical_mean_{col_short}'] = np.nan
+                features[f'historical_min_{col_short}'] = np.nan
+                features[f'historical_max_{col_short}'] = np.nan
+                features[f'percentile_rank_{col_short}'] = 50
+                features[f'consecutive_above_mean_{col_short}'] = 0
+
+        return features
+
+    def prepare_training_dataset(
+        self,
+        target_col: str = 'nota_media',
+        min_years: int = 3,
+        target_years: Optional[List[int]] = None,
+        verbose: bool = False,
+    ) -> pd.DataFrame:
+        """Build the full temporal training dataset with metadata columns."""
+        all_years = sorted(self.df['ano'].unique())
+        if target_years is None:
+            # Target years: every year from 2020 onwards (need at least 2 prior years)
+            target_years = [y for y in all_years if y >= 2020]
+
+        if verbose:
+            print(f"Training with temporal pairs: {[(f'≤{y-1}', f'→{y}') for y in target_years]}")
+
+        rows = []
+
+        for target_year in target_years:
+            # Get schools that have data for the target year
+            target_year_df = self.df[self.df['ano'] == target_year]
+            schools_with_target = target_year_df['codigo_inep'].unique()
+            total_schools = max(len(schools_with_target), 1)
+
+            for codigo_inep in schools_with_target:
+                school_df = self.df[self.df['codigo_inep'] == codigo_inep]
+                target_row = school_df[school_df['ano'] == target_year].iloc[0]
+
+                # Get target value
+                target_val = target_row[target_col]
+                if pd.isna(target_val):
+                    continue
+
+                # Create features from data BEFORE target year
+                train_df = school_df[school_df['ano'] < target_year]
+                if len(train_df) < min_years - 1:
+                    continue
+
+                ranking_brasil = target_row.get('ranking_brasil')
+                rank_percent = (
+                    float(ranking_brasil) / total_schools
+                    if pd.notna(ranking_brasil) and total_schools
+                    else np.nan
+                )
+
+                features = {
+                    'codigo_inep': codigo_inep,
+                    '_target_year': target_year,
+                    '_target_value': float(target_val),
+                    '_ranking_brasil': float(ranking_brasil) if pd.notna(ranking_brasil) else np.nan,
+                    '_rank_percent': rank_percent,
+                }
+                features.update(self.create_lagged_features(train_df))
+                features.update(self.create_trend_features(train_df))
+                features.update(self.create_school_features(train_df))
+                features.update(self.create_bayesian_consistency_features(train_df))
+                features.update(self.create_tri_based_features(train_df))
+                features.update(self.create_skill_gap_features(train_df))
+
+                rows.append(features)
+
+        return pd.DataFrame(rows)
+
     def prepare_training_data(self, target_col: str = 'nota_media', min_years: int = 3) -> Tuple[pd.DataFrame, pd.Series]:
         """
-        Prepare training data for prediction model
+        Prepare training data using ALL temporal pairs.
 
-        Uses 2023 as target year, trains on schools with at least min_years of data
+        Instead of only ≤2022→2023, uses every possible year pair:
+          ≤2019→2020, ≤2020→2021, ≤2021→2022, ≤2022→2023, ≤2023→2024
+
+        This captures the full trajectory of each school and teaches the model
+        that consistent top performers stay at the top.
 
         Args:
             target_col: Target column to predict
-            min_years: Minimum years of data required
+            min_years: Minimum years of data before target year
 
         Returns:
-            X (features DataFrame), y (target Series)
+            X (features DataFrame), y (target Series), school_ids
         """
-        # Get schools with enough data
-        school_counts = self.df.groupby('codigo_inep').size()
-        valid_schools = school_counts[school_counts >= min_years].index
+        dataset = self.prepare_training_dataset(
+            target_col=target_col,
+            min_years=min_years,
+            verbose=True,
+        )
 
-        print(f"Schools with >= {min_years} years: {len(valid_schools)}")
-
-        # For each school, create features using data up to 2022, target is 2023
-        X_list = []
-        y_list = []
-
-        for codigo_inep in valid_schools:
-            school_df = self.df[self.df['codigo_inep'] == codigo_inep]
-
-            # Check if school has 2023 data (our target)
-            if 2023 not in school_df['ano'].values:
-                continue
-
-            # Get 2023 target
-            target_2023 = school_df[school_df['ano'] == 2023][target_col].values[0]
-            if pd.isna(target_2023):
-                continue
-
-            # Create features from data up to 2022
-            train_df = school_df[school_df['ano'] <= 2022]
-            if len(train_df) < 2:
-                continue
-
-            features = {'codigo_inep': codigo_inep}
-            features.update(self.create_lagged_features(train_df))
-            features.update(self.create_trend_features(train_df))
-            features.update(self.create_school_features(train_df))
-            # NEW: Add TRI-based features for training
-            features.update(self.create_tri_based_features(train_df))
-            features.update(self.create_skill_gap_features(train_df))
-
-            X_list.append(features)
-            y_list.append(target_2023)
-
-        X = pd.DataFrame(X_list)
-        y = pd.Series(y_list, name=target_col)
+        if dataset.empty:
+            return pd.DataFrame(), pd.Series(name=target_col, dtype=float), pd.Series(dtype=object)
 
         # Drop non-feature columns
-        feature_cols = [c for c in X.columns if c != 'codigo_inep']
-        X_features = X[feature_cols]
+        meta_cols = ['codigo_inep', '_target_year', '_target_value', '_ranking_brasil', '_rank_percent']
+        feature_cols = [c for c in dataset.columns if c not in meta_cols]
+        X_features = dataset[feature_cols]
+        y = dataset['_target_value']
 
-        print(f"Training samples: {len(X)}")
+        print(f"Training samples: {len(dataset)} (from {len(dataset['_target_year'].unique())} target years)")
         print(f"Features: {len(feature_cols)}")
+        print(f"  Including Bayesian consistency features for school trajectory analysis")
 
-        return X_features, y, X['codigo_inep']
+        return X_features, y, dataset['codigo_inep']
 
     def compute_skill_tri_correlations(self) -> pd.DataFrame:
         """

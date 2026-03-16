@@ -142,8 +142,8 @@ function ProjectionModal({
               {data.area}
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Projeção TRI - {data.area_name}</h2>
-              <p className="text-sm text-gray-500">Análise baseada em {data.historical_analysis.total_years} anos de histórico</p>
+              <h2 className="text-lg font-bold text-gray-900">Cenários TRI - {data.area_name}</h2>
+              <p className="text-sm text-gray-500">Predição oficial calibrada + cenários pedagógicos baseados em {data.historical_analysis.total_years} anos de histórico</p>
             </div>
           </div>
           <button
@@ -163,21 +163,50 @@ function ProjectionModal({
               <div className="text-2xl font-bold text-gray-900">{data.current_score.toFixed(0)}</div>
               <div className="text-xs text-gray-500">Score Atual ({data.current_year})</div>
             </div>
-            <div className="bg-blue-50 rounded-xl p-4 text-center">
-              <div className="text-2xl font-bold text-blue-600">{data.projection.recommended.toFixed(0)}</div>
-              <div className="text-xs text-gray-500">Projeção {data.projection.target_year}</div>
+            <div className={`rounded-xl p-4 text-center ${
+              data.official_prediction.display_mode === 'range' ? 'bg-amber-50' : 'bg-blue-50'
+            }`}>
+              <div className={`text-2xl font-bold ${
+                data.official_prediction.display_mode === 'range' ? 'text-amber-700' : 'text-blue-600'
+              }`}>
+                {data.official_prediction.display_score.toFixed(0)}
+              </div>
+              <div className="text-xs text-gray-500">Predição oficial {data.official_prediction.target_year}</div>
+              {data.official_prediction.display_mode === 'range' ? (
+                <div className="mt-2 text-[11px] font-medium text-amber-700">
+                  {data.official_prediction.confidence_interval.low.toFixed(0)} - {data.official_prediction.confidence_interval.high.toFixed(0)}
+                </div>
+              ) : (
+                <div className={`mt-2 text-[11px] font-medium ${
+                  data.official_prediction.display_expected_change >= 0 ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {data.official_prediction.display_expected_change >= 0 ? '+' : ''}
+                  {data.official_prediction.display_expected_change.toFixed(0)} pts
+                </div>
+              )}
             </div>
             <div className={`rounded-xl p-4 text-center ${data.projection.potential_gain >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
               <div className={`text-2xl font-bold ${data.projection.potential_gain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 {data.projection.potential_gain >= 0 ? '+' : ''}{data.projection.potential_gain.toFixed(0)}
               </div>
-              <div className="text-xs text-gray-500">Ganho Potencial</div>
+              <div className="text-xs text-gray-500">Cenário Pedagógico</div>
             </div>
             <div className="bg-purple-50 rounded-xl p-4 text-center">
               <div className="text-2xl font-bold text-purple-600">{data.stretch_content.total_items}</div>
               <div className="text-xs text-gray-500">Conteúdos a Dominar</div>
             </div>
           </div>
+
+          {data.official_prediction.display_mode === 'range' && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-sm font-semibold text-amber-800">
+                {data.official_prediction.badge_text || 'Projeção conservadora'}
+              </p>
+              <p className="mt-1 text-sm text-amber-700">
+                {data.official_prediction.risk_reason || 'A predição oficial foi apresentada em faixa por exceder a volatilidade histórica observada.'}
+              </p>
+            </div>
+          )}
 
           {/* Historical Chart */}
           <div className="bg-white rounded-xl border border-gray-200 p-4">
@@ -285,14 +314,14 @@ function ProjectionModal({
             </div>
 
             <div className="bg-gray-50 rounded-xl p-4">
-              <h4 className="text-sm font-semibold text-gray-900 mb-3">Cenários de Projeção</h4>
+              <h4 className="text-sm font-semibold text-gray-900 mb-3">Cenários Pedagógicos</h4>
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Conservador</span>
                   <span className="font-medium text-gray-600">{data.projection.scenarios.conservative.toFixed(0)}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-blue-600 font-medium">Realista (Recomendado)</span>
+                  <span className="text-sm text-blue-600 font-medium">Realista (Cenário)</span>
                   <span className="font-bold text-blue-600">{data.projection.scenarios.realistic.toFixed(0)}</span>
                 </div>
                 <div className="flex justify-between items-center">
@@ -365,7 +394,7 @@ function ProjectionModal({
           {/* Footer */}
           <div className="pt-4 border-t border-gray-100 flex justify-between items-center">
             <p className="text-xs text-gray-400">
-              Projeção baseada em {data.historical_analysis.total_years} anos de dados históricos
+              Cenários baseados em {data.historical_analysis.total_years} anos de dados históricos. A predição oficial acima é a referência do produto.
             </p>
             <button
               onClick={onClose}
@@ -393,7 +422,9 @@ function AreaCard({
   codigoInep: string;
   onOpenProjection: (area: string) => void;
 }) {
-  const changeColor = area.expected_change >= 0 ? 'text-green-600' : 'text-red-600';
+  const changeColor = area.display_mode === 'range'
+    ? 'text-amber-700'
+    : area.expected_change >= 0 ? 'text-green-600' : 'text-red-600';
   const masteryPercent = Math.round(area.tri_mastery_level * 100);
 
   const handlePredictionClick = (e: React.MouseEvent) => {
@@ -424,7 +455,7 @@ function AreaCard({
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
-              PREDICTION
+              CENÁRIOS TRI
             </button>
             <svg
               className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
@@ -445,12 +476,25 @@ function AreaCard({
             <div className="text-xl font-bold text-blue-600">{area.predicted_score.toFixed(0)}</div>
           </div>
           <div>
-            <div className="text-gray-500 text-xs">Mudança</div>
+            <div className="text-gray-500 text-xs">{area.display_mode === 'range' ? 'Faixa' : 'Mudança'}</div>
             <div className={`text-xl font-bold ${changeColor}`}>
-              {area.expected_change >= 0 ? '+' : ''}{area.expected_change.toFixed(0)}
+              {area.display_mode === 'range'
+                ? `${area.confidence_interval.low.toFixed(0)}-${area.confidence_interval.high.toFixed(0)}`
+                : `${area.expected_change >= 0 ? '+' : ''}${area.expected_change.toFixed(0)}`}
             </div>
           </div>
         </div>
+
+        {area.display_mode === 'range' && (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+            <p className="text-xs font-semibold text-amber-800">
+              {area.badge_text || 'Projeção conservadora'}
+            </p>
+            {area.risk_reason && (
+              <p className="mt-1 text-xs text-amber-700">{area.risk_reason}</p>
+            )}
+          </div>
+        )}
 
         <div className="mt-4">
           <div className="flex justify-between text-xs text-gray-500 mb-1">
@@ -623,9 +667,20 @@ export default function TRIAnalysis({ codigoInep }: TRIAnalysisProps) {
                   {area.area}
                 </div>
                 <div className="text-lg font-bold text-gray-900">{area.predicted_score.toFixed(0)}</div>
-                <div className={`text-xs font-medium ${area.expected_change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {area.expected_change >= 0 ? '+' : ''}{area.expected_change.toFixed(0)} pts
-                </div>
+                {area.display_mode === 'range' ? (
+                  <>
+                    <div className="text-xs font-medium text-amber-700">
+                      {area.confidence_interval.low.toFixed(0)} - {area.confidence_interval.high.toFixed(0)}
+                    </div>
+                    <div className="mt-1 text-[11px] font-semibold text-amber-700">
+                      {area.badge_text || 'Projeção conservadora'}
+                    </div>
+                  </>
+                ) : (
+                  <div className={`text-xs font-medium ${area.expected_change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {area.expected_change >= 0 ? '+' : ''}{area.expected_change.toFixed(0)} pts
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -649,9 +704,7 @@ export default function TRIAnalysis({ codigoInep }: TRIAnalysisProps) {
 
           {/* Footer */}
           <div className="text-xs text-gray-400 text-center pt-4 border-t border-gray-100">
-            Análise baseada em {data.area_analysis.reduce((acc, a) =>
-              acc + a.accessible_content_sample.length + a.stretch_content_sample.length, 0
-            )} itens de conteúdo (TRI e competências)
+            A apresentação das faixas e deltas é decidida pelo backend com base no histórico da escola e na volatilidade observada.
           </div>
         </div>
       </div>

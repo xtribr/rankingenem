@@ -3,7 +3,7 @@ Prediction API endpoints for ENEM Analytics
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Path as PathParam
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any
 import sys
 from pathlib import Path
@@ -37,12 +37,40 @@ class ConfidenceInterval(BaseModel):
     high: float
 
 
+class PredictionAreaPresentation(BaseModel):
+    current_score: float
+    raw_score: float
+    display_score: float
+    confidence_interval: ConfidenceInterval
+    raw_confidence_interval: ConfidenceInterval
+    display_mode: str
+    risk_level: str
+    risk_reason: Optional[str] = None
+    badge_text: Optional[str] = None
+    historical_corridor: ConfidenceInterval
+    raw_expected_change: float
+    display_expected_change: float
+    model_info: Dict[str, Any] = Field(default_factory=dict)
+
+
 class PredictionResult(BaseModel):
     codigo_inep: str
     target_year: int
     scores: Dict[str, float]
-    confidence_intervals: Dict[str, ConfidenceInterval]
-    model_info: Dict[str, Any]
+    raw_scores: Dict[str, float] = Field(default_factory=dict)
+    display_scores: Dict[str, float] = Field(default_factory=dict)
+    current_scores: Dict[str, float] = Field(default_factory=dict)
+    expected_change: Dict[str, float] = Field(default_factory=dict)
+    raw_expected_change: Dict[str, float] = Field(default_factory=dict)
+    confidence_intervals: Dict[str, ConfidenceInterval] = Field(default_factory=dict)
+    raw_confidence_intervals: Dict[str, ConfidenceInterval] = Field(default_factory=dict)
+    display_modes: Dict[str, str] = Field(default_factory=dict)
+    risk_levels: Dict[str, str] = Field(default_factory=dict)
+    risk_reasons: Dict[str, Optional[str]] = Field(default_factory=dict)
+    badge_texts: Dict[str, Optional[str]] = Field(default_factory=dict)
+    historical_corridors: Dict[str, ConfidenceInterval] = Field(default_factory=dict)
+    areas: Dict[str, PredictionAreaPresentation] = Field(default_factory=dict)
+    model_info: Dict[str, Any] = Field(default_factory=dict)
 
 
 class SinglePrediction(BaseModel):
@@ -67,6 +95,21 @@ class ScenarioResult(BaseModel):
     improved_prediction: float
     delta: float
     impacted_skills: List[str]
+
+
+AREA_MAPPING = {
+    'cn': ('Ciências da Natureza', 'CN', '#22c55e'),
+    'ch': ('Ciências Humanas', 'CH', '#8b5cf6'),
+    'lc': ('Linguagens', 'LC', '#ec4899'),
+    'mt': ('Matemática', 'MT', '#f97316'),
+    'redacao': ('Redação', 'RE', '#3ABFF8'),
+}
+
+
+def _confidence_interval(value: Optional[Dict[str, float]]) -> Optional[ConfidenceInterval]:
+    if not value:
+        return None
+    return ConfidenceInterval(low=float(value['low']), high=float(value['high']))
 
 
 # IMPORTANT: More specific routes must come BEFORE less specific ones
@@ -186,21 +229,21 @@ async def get_prediction_comparison(
         }
     }
 
-    # Calculate expected change
-    expected_change = {}
-    for key in ['cn', 'ch', 'lc', 'mt', 'redacao', 'media']:
-        if key in predictions['scores'] and historical['scores'].get(key):
-            expected_change[key] = predictions['scores'][key] - historical['scores'][key]
-
     return {
         'codigo_inep': codigo_inep,
         'historical': historical,
         'predicted': {
-            'year': 2025,
-            'scores': predictions['scores']
+            'year': predictions.get('target_year', 2025),
+            'scores': predictions.get('scores', {}),
+            'raw_scores': predictions.get('raw_scores', {}),
+            'display_scores': predictions.get('display_scores', {}),
         },
-        'expected_change': expected_change,
-        'confidence_intervals': predictions.get('confidence_intervals', {})
+        'expected_change': predictions.get('expected_change', {}),
+        'raw_expected_change': predictions.get('raw_expected_change', {}),
+        'confidence_intervals': predictions.get('confidence_intervals', {}),
+        'raw_confidence_intervals': predictions.get('raw_confidence_intervals', {}),
+        'areas': predictions.get('areas', {}),
+        'model_info': predictions.get('model_info', {}),
     }
 
 
@@ -280,22 +323,24 @@ async def get_tri_based_prediction_analysis(
 
     # Build area analysis
     area_analysis = []
-    area_mapping = {
-        'cn': ('Ciências da Natureza', 'CN', '#22c55e'),
-        'ch': ('Ciências Humanas', 'CH', '#8b5cf6'),
-        'lc': ('Linguagens', 'LC', '#ec4899'),
-        'mt': ('Matemática', 'MT', '#f97316'),
-        'redacao': ('Redação', 'RE', '#3ABFF8')
-    }
 
     latest = school_df.sort_values('ano').iloc[-1]
 
-    for area_key, (area_name, area_code, color) in area_mapping.items():
-        current_score = latest.get(f'nota_{area_key}', 500)
-        if pd.isna(current_score):
-            current_score = 500 if area_key != 'redacao' else 600  # Redação uses 0-1000 scale
+    for area_key, (area_name, area_code, color) in AREA_MAPPING.items():
+        presentation = predictions.get('areas', {}).get(area_key, {})
+        latest_score = latest.get(f'nota_{area_key}')
+        current_score = presentation.get('current_score')
+        if current_score is None and pd.notna(latest_score):
+            current_score = float(latest_score)
+        if current_score is None:
+            current_score = 0.0
 
-        predicted = predictions.get('scores', {}).get(area_key, current_score)
+        raw_score = float(presentation.get('raw_score', presentation.get('display_score', current_score)))
+        display_score = float(presentation.get('display_score', current_score))
+        confidence_interval = presentation.get('confidence_interval') or {
+            'low': display_score,
+            'high': display_score,
+        }
 
         # Get TRI content stats for this area (not applicable for Redação)
         accessible_content = []
@@ -377,8 +422,20 @@ async def get_tri_based_prediction_analysis(
             'area_name': area_name,
             'color': color,
             'current_score': float(current_score),
-            'predicted_score': float(predicted),
-            'expected_change': float(predicted - current_score),
+            'raw_score': raw_score,
+            'display_score': display_score,
+            'predicted_score': display_score,
+            'raw_expected_change': float(presentation.get('raw_expected_change', raw_score - current_score)),
+            'display_expected_change': float(presentation.get('display_expected_change', display_score - current_score)),
+            'expected_change': float(presentation.get('display_expected_change', display_score - current_score)),
+            'confidence_interval': confidence_interval,
+            'raw_confidence_interval': presentation.get('raw_confidence_interval') or confidence_interval,
+            'display_mode': presentation.get('display_mode', 'delta'),
+            'risk_level': presentation.get('risk_level', 'normal'),
+            'risk_reason': presentation.get('risk_reason'),
+            'badge_text': presentation.get('badge_text'),
+            'historical_corridor': presentation.get('historical_corridor'),
+            'model_info': presentation.get('model_info', {}),
             'tri_mastery_level': mastery_level,
             'tri_gap_to_median': gap_to_median,
             'tri_potential': potential,
@@ -467,12 +524,8 @@ async def get_area_projection(
 
     # Area configuration
     area_config = {
-        'cn': ('Ciências da Natureza', 'CN', '#22c55e'),
-        'ch': ('Ciências Humanas', 'CH', '#8b5cf6'),
-        'lc': ('Linguagens', 'LC', '#ec4899'),
-        'mt': ('Matemática', 'MT', '#f97316'),
-        're': ('Redação', 'RE', '#3ABFF8'),
-        'redacao': ('Redação', 'RE', '#3ABFF8')
+        **AREA_MAPPING,
+        're': AREA_MAPPING['redacao'],
     }
 
     if area_lower not in area_config:
@@ -481,6 +534,9 @@ async def get_area_projection(
     area_name, area_code, color = area_config[area_lower]
     # Handle Redação column name
     nota_col = 'nota_redacao' if area_lower in ['re', 'redacao'] else f'nota_{area_lower}'
+    prediction_target = 'nota_redacao' if area_lower in ['re', 'redacao'] else nota_col
+
+    official_prediction = model.predict(codigo_inep, prediction_target)
 
     # Extract historical TRI scores (all years)
     historical_scores = []
@@ -682,6 +738,13 @@ async def get_area_projection(
             'message': f'Projeção indica ganho potencial de {potential_gain:.0f} pontos com foco no conteúdo apropriado.'
         })
 
+    if official_prediction.get('display_mode') == 'range':
+        insights.append({
+            'type': 'warning',
+            'title': official_prediction.get('badge_text') or 'Predição oficial em faixa',
+            'message': official_prediction.get('risk_reason') or 'A predição oficial foi apresentada em faixa por exceder a volatilidade histórica observada.'
+        })
+
     return {
         'codigo_inep': codigo_inep,
         'area': area_code,
@@ -726,6 +789,22 @@ async def get_area_projection(
             'recommended': float(realistic_projection),
             'confidence_interval': confidence_interval,
             'potential_gain': float(potential_gain)
+        },
+        'official_prediction': {
+            'target_year': 2025,
+            'current_score': float(official_prediction['current_score']),
+            'raw_score': float(official_prediction['raw_score']),
+            'display_score': float(official_prediction['display_score']),
+            'confidence_interval': official_prediction['confidence_interval'],
+            'raw_confidence_interval': official_prediction['raw_confidence_interval'],
+            'display_mode': official_prediction['display_mode'],
+            'risk_level': official_prediction['risk_level'],
+            'risk_reason': official_prediction['risk_reason'],
+            'badge_text': official_prediction['badge_text'],
+            'historical_corridor': official_prediction['historical_corridor'],
+            'raw_expected_change': float(official_prediction['raw_expected_change']),
+            'display_expected_change': float(official_prediction['expected_change']),
+            'model_info': official_prediction.get('model_info', {}),
         },
         'insights': insights
     }
@@ -801,22 +880,60 @@ async def predict_school_scores(
     if 'error' in result:
         raise HTTPException(status_code=422, detail=result['error'])
 
-    # Format confidence intervals
-    confidence_intervals = {}
-    for key, ci in result.get('confidence_intervals', {}).items():
-        confidence_intervals[key] = ConfidenceInterval(
-            low=ci['low'],
-            high=ci['high']
-        )
-
     return PredictionResult(
         codigo_inep=codigo_inep,
-        target_year=2025,
+        target_year=result.get('target_year', 2025),
         scores=result.get('scores', {}),
-        confidence_intervals=confidence_intervals,
+        raw_scores=result.get('raw_scores', {}),
+        display_scores=result.get('display_scores', {}),
+        current_scores=result.get('current_scores', {}),
+        expected_change=result.get('expected_change', {}),
+        raw_expected_change=result.get('raw_expected_change', {}),
+        confidence_intervals={
+            key: ConfidenceInterval(low=ci['low'], high=ci['high'])
+            for key, ci in result.get('confidence_intervals', {}).items()
+        },
+        raw_confidence_intervals={
+            key: ConfidenceInterval(low=ci['low'], high=ci['high'])
+            for key, ci in result.get('raw_confidence_intervals', {}).items()
+        },
+        display_modes=result.get('display_modes', {}),
+        risk_levels=result.get('risk_levels', {}),
+        risk_reasons=result.get('risk_reasons', {}),
+        badge_texts=result.get('badge_texts', {}),
+        historical_corridors={
+            key: ConfidenceInterval(low=ci['low'], high=ci['high'])
+            for key, ci in result.get('historical_corridors', {}).items()
+        },
+        areas={
+            key: PredictionAreaPresentation(
+                current_score=float(value['current_score']),
+                raw_score=float(value['raw_score']),
+                display_score=float(value['display_score']),
+                confidence_interval=ConfidenceInterval(
+                    low=float(value['confidence_interval']['low']),
+                    high=float(value['confidence_interval']['high']),
+                ),
+                raw_confidence_interval=ConfidenceInterval(
+                    low=float(value['raw_confidence_interval']['low']),
+                    high=float(value['raw_confidence_interval']['high']),
+                ),
+                display_mode=value['display_mode'],
+                risk_level=value['risk_level'],
+                risk_reason=value.get('risk_reason'),
+                badge_text=value.get('badge_text'),
+                historical_corridor=ConfidenceInterval(
+                    low=float(value['historical_corridor']['low']),
+                    high=float(value['historical_corridor']['high']),
+                ),
+                raw_expected_change=float(value['raw_expected_change']),
+                display_expected_change=float(value['display_expected_change']),
+                model_info=value.get('model_info', {}),
+            )
+            for key, value in result.get('areas', {}).items()
+        },
         model_info={
-            "algorithm": "HistGradientBoostingRegressor",
-            "training_samples": result.get('training_info', {}).get('samples', 15807),
-            "disclaimer": result.get('disclaimer', ''),
-        }
+            **result.get('model_info', {}),
+            'disclaimer': result.get('disclaimer', ''),
+        },
     )

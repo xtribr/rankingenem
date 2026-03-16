@@ -141,6 +141,7 @@ export default function SchoolDetailPage() {
   ].filter(d => d.value) : [];
 
   const totalScore = pieData.reduce((acc, d) => acc + (d.value || 0), 0);
+  const mediaPresentation = predictions?.areas?.media;
 
   // Bar data sorted
   const barData = latestScore ? [
@@ -578,17 +579,40 @@ export default function SchoolDetailPage() {
               {predictions ? (
                 <div className="space-y-3">
                   <div className="text-3xl font-bold text-sky-500">
-                    {predictions.scores.media?.toFixed(1) || 'N/A'}
+                    {mediaPresentation?.display_score?.toFixed(1) || predictions.scores.media?.toFixed(1) || 'N/A'}
                   </div>
-                  <p className="text-xs text-gray-500 font-medium">Média estimada</p>
+                  <p className="text-xs text-gray-500 font-medium">
+                    {mediaPresentation?.display_mode === 'range' ? 'Faixa recomendada para 2025' : 'Média estimada'}
+                  </p>
+                  {mediaPresentation?.display_mode === 'range' ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+                      <p className="text-xs font-semibold text-amber-700">
+                        {mediaPresentation.badge_text || 'Projeção conservadora'}
+                      </p>
+                      <p className="mt-1 text-xs text-amber-700">
+                        {mediaPresentation.confidence_interval.low.toFixed(0)} - {mediaPresentation.confidence_interval.high.toFixed(0)} pontos
+                      </p>
+                    </div>
+                  ) : (
+                    <p className={`text-xs font-medium ${
+                      (mediaPresentation?.display_expected_change ?? 0) >= 0 ? 'text-emerald-600' : 'text-red-500'
+                    }`}>
+                      {(mediaPresentation?.display_expected_change ?? 0) >= 0 ? '+' : ''}
+                      {(mediaPresentation?.display_expected_change ?? 0).toFixed(1)} pontos vs. {latestScore?.ano}
+                    </p>
+                  )}
                   <div className="space-y-1.5 mt-4 pt-3 border-t border-gray-100">
                     {['cn', 'ch', 'lc', 'mt', 'redacao'].map((area) => {
-                      const score = predictions.scores[area];
-                      if (!score) return null;
+                      const presentation = predictions.areas?.[area];
+                      const score = presentation?.display_score ?? predictions.scores[area];
+                      if (score === undefined || score === null) return null;
                       return (
                         <div key={area} className="flex justify-between text-xs">
                           <span className="text-gray-500 uppercase font-medium">{area}</span>
-                          <span className="font-bold text-gray-700">{(score as number).toFixed(0)}</span>
+                          <span className="font-bold text-gray-700">
+                            {Number(score).toFixed(0)}
+                            {presentation?.display_mode === 'range' ? ' faixa' : ''}
+                          </span>
                         </div>
                       );
                     })}
