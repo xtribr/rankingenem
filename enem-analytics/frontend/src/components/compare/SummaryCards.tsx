@@ -2,6 +2,7 @@
 
 import { TrendingUp, TrendingDown, Trophy, Minus } from 'lucide-react';
 import { DiagnosisComparisonResult } from '@/lib/api';
+import { formatTriScore } from '@/lib/utils';
 
 interface SchoolSummary {
   codigo_inep: string;
@@ -66,7 +67,7 @@ export default function SummaryCards({ school1, school2, diagnosisComparison }: 
             <div className="flex items-center gap-2">
               <Trophy className="h-5 w-5 text-amber-500" />
               <span className="text-2xl font-bold text-blue-600">
-                {school1.nota_media?.toFixed(0) || '-'} pts
+                {formatTriScore(school1.nota_media)} pts
               </span>
               <span className="text-sm text-gray-500">(2024)</span>
             </div>
@@ -128,7 +129,7 @@ export default function SummaryCards({ school1, school2, diagnosisComparison }: 
             <div className="flex items-center gap-2">
               <Trophy className="h-5 w-5 text-amber-500" />
               <span className="text-2xl font-bold text-green-600">
-                {school2.nota_media?.toFixed(0) || '-'} pts
+                {formatTriScore(school2.nota_media)} pts
               </span>
               <span className="text-sm text-gray-500">(2024)</span>
             </div>
@@ -185,7 +186,7 @@ export default function SummaryCards({ school1, school2, diagnosisComparison }: 
           ) : (
             <>
               <span className="font-medium">
-                Diferença: {diff > 0 ? '+' : ''}{diff.toFixed(0)} pts
+                Diferença: {diff > 0 ? '+' : ''}{formatTriScore(diff)} pts
               </span>
               <span className="text-sm">
                 ({diff > 0 ? school1.nome_escola.slice(0, 15) : school2.nome_escola.slice(0, 15)} na frente)

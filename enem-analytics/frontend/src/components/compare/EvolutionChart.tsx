@@ -12,6 +12,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { TrendingUp, TrendingDown, Calendar, Award } from 'lucide-react';
+import { formatTriScore } from '@/lib/utils';
 
 interface YearData {
   ano: number;
@@ -106,6 +107,7 @@ export default function EvolutionChart({
             domain={[400, 950]}
             tick={{ fill: '#6b7280', fontSize: 11 }}
             tickCount={6}
+            tickFormatter={(value) => typeof value === 'number' ? formatTriScore(value) : value}
           />
 
           {/* TOP Brasil reference line */}
@@ -116,7 +118,7 @@ export default function EvolutionChart({
               strokeDasharray="5 5"
               strokeWidth={2}
               label={{
-                value: `TOP: ${topScore}`,
+                value: `TOP: ${formatTriScore(topScore)}`,
                 fill: '#f59e0b',
                 fontSize: 11,
                 position: 'right',
@@ -126,7 +128,7 @@ export default function EvolutionChart({
 
           <Tooltip
             formatter={(value) => [
-              value ? (value as number).toFixed(0) + ' pts' : '-',
+              value ? formatTriScore(value as number) + ' pts' : '-',
             ]}
             contentStyle={{
               backgroundColor: 'white',
@@ -180,7 +182,7 @@ export default function EvolutionChart({
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
               <p className="text-blue-600 font-medium">
-                {trend1.totalChange >= 0 ? '+' : ''}{trend1.totalChange.toFixed(0)} pts
+                {trend1.totalChange >= 0 ? '+' : ''}{formatTriScore(trend1.totalChange)} pts
               </p>
               <p className="text-xs text-blue-500">Total no período</p>
             </div>
@@ -192,11 +194,11 @@ export default function EvolutionChart({
             </div>
             <div className="flex items-center gap-1">
               <Award className="h-3 w-3 text-amber-500" />
-              <span className="text-gray-700">{trend1.bestYear}: {trend1.bestScore?.toFixed(0)}</span>
+              <span className="text-gray-700">{trend1.bestYear}: {formatTriScore(trend1.bestScore)}</span>
             </div>
             <div className="flex items-center gap-1">
               <Calendar className="h-3 w-3 text-gray-400" />
-              <span className="text-gray-500">{trend1.worstYear}: {trend1.worstScore?.toFixed(0)}</span>
+              <span className="text-gray-500">{trend1.worstYear}: {formatTriScore(trend1.worstScore)}</span>
             </div>
           </div>
         </div>
@@ -216,7 +218,7 @@ export default function EvolutionChart({
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
               <p className="text-green-600 font-medium">
-                {trend2.totalChange >= 0 ? '+' : ''}{trend2.totalChange.toFixed(0)} pts
+                {trend2.totalChange >= 0 ? '+' : ''}{formatTriScore(trend2.totalChange)} pts
               </p>
               <p className="text-xs text-green-500">Total no período</p>
             </div>
@@ -228,11 +230,11 @@ export default function EvolutionChart({
             </div>
             <div className="flex items-center gap-1">
               <Award className="h-3 w-3 text-amber-500" />
-              <span className="text-gray-700">{trend2.bestYear}: {trend2.bestScore?.toFixed(0)}</span>
+              <span className="text-gray-700">{trend2.bestYear}: {formatTriScore(trend2.bestScore)}</span>
             </div>
             <div className="flex items-center gap-1">
               <Calendar className="h-3 w-3 text-gray-400" />
-              <span className="text-gray-500">{trend2.worstYear}: {trend2.worstScore?.toFixed(0)}</span>
+              <span className="text-gray-500">{trend2.worstYear}: {formatTriScore(trend2.worstScore)}</span>
             </div>
           </div>
         </div>

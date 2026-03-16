@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, TRIAreaAnalysis, TRIAreaProjection } from '@/lib/api';
+import { formatTriScore } from '@/lib/utils';
 import {
   LineChart,
   Line,
@@ -177,7 +178,7 @@ function ProjectionModal({
           {/* Key Metrics */}
           <div className="grid grid-cols-4 gap-4">
             <div className="bg-gray-50 rounded-xl p-4 text-center">
-              <div className="text-2xl font-bold text-gray-900">{data.current_score.toFixed(0)}</div>
+              <div className="text-2xl font-bold text-gray-900">{formatTriScore(data.current_score)}</div>
               <div className="text-xs text-gray-500">Score Atual ({data.current_year})</div>
             </div>
             <div className={`rounded-xl p-4 text-center ${
@@ -186,25 +187,25 @@ function ProjectionModal({
               <div className={`text-2xl font-bold ${
                 data.official_prediction.display_mode === 'range' ? 'text-amber-700' : 'text-blue-600'
               }`}>
-                {data.official_prediction.display_score.toFixed(0)}
+                {formatTriScore(data.official_prediction.display_score)}
               </div>
               <div className="text-xs text-gray-500">Predição oficial {data.official_prediction.target_year}</div>
               {data.official_prediction.display_mode === 'range' ? (
                 <div className="mt-2 text-[11px] font-medium text-amber-700">
-                  {data.official_prediction.confidence_interval.low.toFixed(0)} - {data.official_prediction.confidence_interval.high.toFixed(0)}
+                  {formatTriScore(data.official_prediction.confidence_interval.low)} - {formatTriScore(data.official_prediction.confidence_interval.high)}
                 </div>
               ) : (
                 <div className={`mt-2 text-[11px] font-medium ${
                   data.official_prediction.display_expected_change >= 0 ? 'text-green-600' : 'text-red-600'
                 }`}>
                   {data.official_prediction.display_expected_change >= 0 ? '+' : ''}
-                  {data.official_prediction.display_expected_change.toFixed(0)} pts
+                  {formatTriScore(data.official_prediction.display_expected_change)} pts
                 </div>
               )}
             </div>
             <div className={`rounded-xl p-4 text-center ${data.projection.potential_gain >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
               <div className={`text-2xl font-bold ${data.projection.potential_gain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {data.projection.potential_gain >= 0 ? '+' : ''}{data.projection.potential_gain.toFixed(0)}
+                {data.projection.potential_gain >= 0 ? '+' : ''}{formatTriScore(data.projection.potential_gain)}
               </div>
               <div className="text-xs text-gray-500">Cenário Pedagógico</div>
             </div>
@@ -242,7 +243,7 @@ function ProjectionModal({
                   ticks={yTicks}
                   width={56}
                   tick={{ fill: '#6b7280', fontSize: 11 }}
-                  tickFormatter={(value) => Math.round(value).toString()}
+                  tickFormatter={(value) => typeof value === 'number' ? formatTriScore(value) : value}
                   axisLine={false}
                   tickLine={false}
                 />
@@ -338,20 +339,20 @@ function ProjectionModal({
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Conservador</span>
-                  <span className="font-medium text-gray-600">{data.projection.scenarios.conservative.toFixed(0)}</span>
+                  <span className="font-medium text-gray-600">{formatTriScore(data.projection.scenarios.conservative)}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-blue-600 font-medium">Realista (Cenário)</span>
-                  <span className="font-bold text-blue-600">{data.projection.scenarios.realistic.toFixed(0)}</span>
+                  <span className="font-bold text-blue-600">{formatTriScore(data.projection.scenarios.realistic)}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Otimista</span>
-                  <span className="font-medium text-green-600">{data.projection.scenarios.optimistic.toFixed(0)}</span>
+                  <span className="font-medium text-green-600">{formatTriScore(data.projection.scenarios.optimistic)}</span>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-gray-200">
                   <span className="text-sm text-gray-600">Intervalo de Confiança</span>
                   <span className="font-medium text-gray-500">
-                    {data.projection.confidence_interval.low.toFixed(0)} - {data.projection.confidence_interval.high.toFixed(0)}
+                    {formatTriScore(data.projection.confidence_interval.low)} - {formatTriScore(data.projection.confidence_interval.high)}
                   </span>
                 </div>
               </div>
@@ -392,18 +393,18 @@ function ProjectionModal({
                 Conteúdo a Dominar para Alcançar a Projeção
               </h4>
               <p className="text-xs text-amber-700 mb-3">
-                TRI entre {data.stretch_content.tri_range.min.toFixed(0)} e {data.stretch_content.tri_range.max.toFixed(0)} pontos
+                TRI entre {formatTriScore(data.stretch_content.tri_range.min)} e {formatTriScore(data.stretch_content.tri_range.max)} pontos
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-60 overflow-y-auto">
                 {data.stretch_content.items.map((item, idx) => (
                   <div key={idx} className="bg-white p-3 rounded-lg border border-amber-100">
                     <div className="flex justify-between items-start mb-1">
                       <span className="font-mono text-amber-700 font-medium text-sm">{item.skill}</span>
-                      <span className="text-xs text-gray-500">TRI: {item.tri_score.toFixed(0)}</span>
+                      <span className="text-xs text-gray-500">TRI: {formatTriScore(item.tri_score)}</span>
                     </div>
                     <p className="text-xs text-gray-600 line-clamp-2">{item.description}</p>
                     <div className="mt-1">
-                      <span className="text-xs text-red-500">Gap: +{item.gap.toFixed(0)} pts</span>
+                      <span className="text-xs text-red-500">Gap: +{formatTriScore(item.gap)} pts</span>
                     </div>
                   </div>
                 ))}
@@ -489,18 +490,18 @@ function AreaCard({
         <div className="grid grid-cols-3 gap-4 text-sm">
           <div>
             <div className="text-gray-500 text-xs">Atual</div>
-            <div className="text-xl font-bold text-gray-900">{area.current_score.toFixed(0)}</div>
+            <div className="text-xl font-bold text-gray-900">{formatTriScore(area.current_score)}</div>
           </div>
           <div>
             <div className="text-gray-500 text-xs">Previsto</div>
-            <div className="text-xl font-bold text-blue-600">{area.predicted_score.toFixed(0)}</div>
+            <div className="text-xl font-bold text-blue-600">{formatTriScore(area.predicted_score)}</div>
           </div>
           <div>
             <div className="text-gray-500 text-xs">{area.display_mode === 'range' ? 'Faixa' : 'Mudança'}</div>
             <div className={`text-xl font-bold ${changeColor}`}>
               {area.display_mode === 'range'
-                ? `${area.confidence_interval.low.toFixed(0)}-${area.confidence_interval.high.toFixed(0)}`
-                : `${area.expected_change >= 0 ? '+' : ''}${area.expected_change.toFixed(0)}`}
+                ? `${formatTriScore(area.confidence_interval.low)}-${formatTriScore(area.confidence_interval.high)}`
+                : `${area.expected_change >= 0 ? '+' : ''}${formatTriScore(area.expected_change)}`}
             </div>
           </div>
         </div>
@@ -536,7 +537,7 @@ function AreaCard({
           <div className="flex items-center gap-1">
             <span className="text-gray-500">Gap Mediana:</span>
             <span className={area.tri_gap_to_median >= 0 ? 'text-green-600' : 'text-red-600'}>
-              {area.tri_gap_to_median >= 0 ? '+' : ''}{area.tri_gap_to_median.toFixed(0)}
+              {area.tri_gap_to_median >= 0 ? '+' : ''}{formatTriScore(area.tri_gap_to_median)}
             </span>
           </div>
           <div className="flex items-center gap-1">
@@ -563,7 +564,7 @@ function AreaCard({
                     <li key={idx} className="text-xs bg-white p-2 rounded border border-gray-100">
                       <div className="flex justify-between items-start mb-1">
                         <span className="font-mono text-green-600 font-medium">{content.skill}</span>
-                        <span className="text-gray-400">{area.area === 'RE' ? 'Máx' : 'TRI'}: {content.tri_score.toFixed(0)}</span>
+                        <span className="text-gray-400">{area.area === 'RE' ? 'Máx' : 'TRI'}: {formatTriScore(content.tri_score)}</span>
                       </div>
                       <p className="text-gray-600 line-clamp-2">{content.description}</p>
                     </li>
@@ -589,8 +590,8 @@ function AreaCard({
                       <div className="flex justify-between items-start mb-1">
                         <span className="font-mono text-amber-600 font-medium">{content.skill}</span>
                         <span className="text-gray-400">
-                          {area.area === 'RE' ? 'Máx' : 'TRI'}: {content.tri_score.toFixed(0)}
-                          {content.gap && <span className="text-red-500 ml-1">(+{content.gap.toFixed(0)})</span>}
+                          {area.area === 'RE' ? 'Máx' : 'TRI'}: {formatTriScore(content.tri_score)}
+                          {content.gap && <span className="text-red-500 ml-1">(+{formatTriScore(content.gap)})</span>}
                         </span>
                       </div>
                       <p className="text-gray-600 line-clamp-2">{content.description}</p>
@@ -686,11 +687,11 @@ export default function TRIAnalysis({ codigoInep }: TRIAnalysisProps) {
                 >
                   {area.area}
                 </div>
-                <div className="text-lg font-bold text-gray-900">{area.predicted_score.toFixed(0)}</div>
+                <div className="text-lg font-bold text-gray-900">{formatTriScore(area.predicted_score)}</div>
                 {area.display_mode === 'range' ? (
                   <>
                     <div className="text-xs font-medium text-amber-700">
-                      {area.confidence_interval.low.toFixed(0)} - {area.confidence_interval.high.toFixed(0)}
+                      {formatTriScore(area.confidence_interval.low)} - {formatTriScore(area.confidence_interval.high)}
                     </div>
                     <div className="mt-1 text-[11px] font-semibold text-amber-700">
                       {area.badge_text || 'Projeção conservadora'}
@@ -698,7 +699,7 @@ export default function TRIAnalysis({ codigoInep }: TRIAnalysisProps) {
                   </>
                 ) : (
                   <div className={`text-xs font-medium ${area.expected_change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {area.expected_change >= 0 ? '+' : ''}{area.expected_change.toFixed(0)} pts
+                    {area.expected_change >= 0 ? '+' : ''}{formatTriScore(area.expected_change)} pts
                   </div>
                 )}
               </div>

@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { formatNumber, formatRanking } from '@/lib/utils';
+import { formatRanking, formatTriScore } from '@/lib/utils';
 import Link from 'next/link';
 import { TrendingUp, TrendingDown, Bell } from 'lucide-react';
 
@@ -64,7 +64,7 @@ export default function TrendsPage() {
                   <p className="text-sm text-gray-500">{school.uf}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-lg font-bold text-blue-600">{formatNumber(school.nota_media)}</p>
+                  <p className="text-lg font-bold text-blue-600">{formatTriScore(school.nota_media)}</p>
                   <p className="text-xs text-gray-500">média</p>
                 </div>
               </div>

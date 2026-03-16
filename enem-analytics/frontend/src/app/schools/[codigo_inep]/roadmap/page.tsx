@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { api, API_BASE } from '@/lib/api';
+import { formatTriScore } from '@/lib/utils';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -183,7 +184,7 @@ export default function RoadmapPage() {
               </span>
             </div>
             <p className="text-3xl font-bold text-slate-900 mt-4">
-              {currentScore.toFixed(0)}
+              {formatTriScore(currentScore)}
             </p>
             <p className="text-sm text-slate-500 mt-1">Média Atual</p>
           </div>
@@ -199,7 +200,7 @@ export default function RoadmapPage() {
               </span>
             </div>
             <p className="text-3xl font-bold text-slate-900 mt-4">
-              {targetScore.toFixed(0)}
+              {formatTriScore(targetScore)}
             </p>
             <p className="text-sm text-slate-500 mt-1">Média Alvo</p>
           </div>
@@ -256,7 +257,12 @@ export default function RoadmapPage() {
                 <BarChart data={areaChartData} barGap={8}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                   <XAxis dataKey="name" tick={{ fontSize: 12 }} stroke="#64748B" />
-                  <YAxis domain={[400, 850]} tick={{ fontSize: 12 }} stroke="#64748B" />
+                  <YAxis
+                    domain={[400, 850]}
+                    tick={{ fontSize: 12 }}
+                    stroke="#64748B"
+                    tickFormatter={(value) => typeof value === 'number' ? formatTriScore(value) : value}
+                  />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: '#fff',
@@ -264,7 +270,7 @@ export default function RoadmapPage() {
                       borderRadius: '12px',
                       boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
                     }}
-                    formatter={(value) => [`${(value as number)?.toFixed(0) ?? 0} pts`, 'Nota']}
+                    formatter={(value) => [`${formatTriScore(value as number)} pts`, 'Nota']}
                   />
                   <Bar dataKey="score" radius={[8, 8, 0, 0]} maxBarSize={60}>
                     {areaChartData.map((entry: any, index: number) => (
@@ -280,7 +286,7 @@ export default function RoadmapPage() {
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-slate-900">Progresso Geral</h3>
-              <p className="text-sm text-slate-500">Meta: {targetScore.toFixed(0)} pontos</p>
+              <p className="text-sm text-slate-500">Meta: {formatTriScore(targetScore)} pontos</p>
             </div>
             <div className="h-56 flex items-center justify-center">
               <ResponsiveContainer width="100%" height="100%" minWidth={0}>
@@ -319,7 +325,7 @@ export default function RoadmapPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold text-slate-900">
-                      {area.score?.toFixed(0)}
+                      {formatTriScore(area.score)}
                     </span>
                     <span className="text-xs text-green-600">+5%</span>
                   </div>
@@ -361,7 +367,7 @@ export default function RoadmapPage() {
                       <span className="text-xs font-semibold text-slate-900">{phase.name}</span>
                     </div>
                     <p className="text-xs text-slate-500 line-clamp-2 mb-2">{phase.description}</p>
-                    <span className="text-xs font-medium text-green-600">+{phase.expected_gain?.toFixed(0) || 0} pts</span>
+                    <span className="text-xs font-medium text-green-600">+{phase.expected_gain !== undefined ? formatTriScore(phase.expected_gain) : '0,0'} pts</span>
                   </div>
                 ))}
               </div>
@@ -488,7 +494,7 @@ export default function RoadmapPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-green-600">
-                        +{win.expected_gain?.toFixed(0)}
+                        +{formatTriScore(win.expected_gain)}
                       </span>
                       <ChevronRight className="h-4 w-4 text-slate-400" />
                     </div>
@@ -550,7 +556,7 @@ export default function RoadmapPage() {
                           </span>
                         </div>
                         <div className="text-[10px] text-slate-500 mb-2">
-                          Score: {areaData.predicted_score?.toFixed(0)} pts • {areaData.total_files} arquivos
+                          Score: {formatTriScore(areaData.predicted_score)} pts • {areaData.total_files} arquivos
                         </div>
                         <div className="space-y-1">
                           {areaData.materials.slice(0, 3).map((mat, idx) => (

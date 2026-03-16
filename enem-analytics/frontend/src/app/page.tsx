@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { formatNumber } from '@/lib/utils';
+import { formatNumber, formatTriScore } from '@/lib/utils';
 import Link from 'next/link';
 import { 
   Trophy, School, Calendar, MapPin, Bell, Sparkles, 
@@ -209,7 +209,7 @@ export default function Dashboard() {
                   </span>
                 </div>
                 <p className="text-sm font-medium text-slate-600 mb-1">{item.shortLabel}</p>
-                <p className="text-3xl font-bold text-slate-900">{formatNumber(item.value)}</p>
+                <p className="text-3xl font-bold text-slate-900">{formatTriScore(item.value)}</p>
                 <p className="text-xs text-slate-400 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   {item.label}
                 </p>
@@ -320,7 +320,7 @@ export default function Dashboard() {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <span className="text-lg font-bold text-slate-900">{formatNumber(school.nota_media)}</span>
+                      <span className="text-lg font-bold text-slate-900">{formatTriScore(school.nota_media)}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <span className="text-sm font-medium text-slate-600">
@@ -330,19 +330,19 @@ export default function Dashboard() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-slate-600 hidden lg:table-cell">
-                      {formatNumber(school.nota_cn)}
+                      {formatTriScore(school.nota_cn)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-slate-600 hidden lg:table-cell">
-                      {formatNumber(school.nota_ch)}
+                      {formatTriScore(school.nota_ch)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-slate-600 hidden lg:table-cell">
-                      {formatNumber(school.nota_lc)}
+                      {formatTriScore(school.nota_lc)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-slate-600 hidden lg:table-cell">
-                      {formatNumber(school.nota_mt)}
+                      {formatTriScore(school.nota_mt)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-slate-600 hidden xl:table-cell">
-                      {formatNumber(school.nota_redacao)}
+                      {formatTriScore(school.nota_redacao)}
                     </td>
                   </tr>
                 ))}

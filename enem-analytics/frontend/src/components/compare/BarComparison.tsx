@@ -13,6 +13,7 @@ import {
   Cell,
 } from 'recharts';
 import { DiagnosisComparisonResult } from '@/lib/api';
+import { formatTriScore } from '@/lib/utils';
 
 interface BarComparisonProps {
   diagnosisComparison: DiagnosisComparisonResult;
@@ -81,6 +82,7 @@ export default function BarComparison({
             domain={[400, 950]}
             tick={{ fill: '#6b7280', fontSize: 11 }}
             tickCount={6}
+            tickFormatter={(value) => typeof value === 'number' ? formatTriScore(value) : value}
           />
           <YAxis
             type="category"
@@ -97,7 +99,7 @@ export default function BarComparison({
               strokeDasharray="5 5"
               strokeWidth={2}
               label={{
-                value: `TOP: ${maxTop}`,
+                value: `TOP: ${formatTriScore(maxTop)}`,
                 fill: '#f59e0b',
                 fontSize: 10,
                 position: 'top',
@@ -106,7 +108,7 @@ export default function BarComparison({
           )}
 
           <Tooltip
-            formatter={(value) => [(value as number).toFixed(0) + ' pts']}
+            formatter={(value) => [formatTriScore(value as number) + ' pts']}
             labelFormatter={(label) => String(label)}
             contentStyle={{
               backgroundColor: 'white',

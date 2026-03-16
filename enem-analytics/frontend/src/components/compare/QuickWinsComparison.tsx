@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { api, Recommendation } from '@/lib/api';
 import { Zap, TrendingUp, Target, ArrowRight, Loader2 } from 'lucide-react';
+import { formatTriScore } from '@/lib/utils';
 
 interface QuickWinsComparisonProps {
   school1Code: string;
@@ -41,24 +42,24 @@ function QuickWinCard({ win, schoolColor }: { win: Recommendation; schoolColor: 
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-sm">
           <span className="text-gray-600">Atual:</span>
-          <span className="font-medium">{win.current_score.toFixed(0)} pts</span>
+          <span className="font-medium">{formatTriScore(win.current_score)} pts</span>
           <ArrowRight className="h-3 w-3 text-gray-400" />
           <span className="text-gray-600">Meta:</span>
           <span className={`font-medium ${schoolColor === 'blue' ? 'text-blue-600' : 'text-green-600'}`}>
-            {win.target_score.toFixed(0)} pts
+            {formatTriScore(win.target_score)} pts
           </span>
         </div>
 
         <div className="flex items-center gap-2">
           <TrendingUp className={`h-4 w-4 ${schoolColor === 'blue' ? 'text-blue-500' : 'text-green-500'}`} />
           <span className={`text-sm font-semibold ${schoolColor === 'blue' ? 'text-blue-600' : 'text-green-600'}`}>
-            +{win.expected_gain.toFixed(0)} pts potenciais
+            +{formatTriScore(win.expected_gain)} pts potenciais
           </span>
         </div>
 
         {win.gap_to_mean < 0 && (
           <p className="text-xs text-gray-500">
-            Gap para média: {win.gap_to_mean.toFixed(0)} pts
+            Gap para média: {formatTriScore(win.gap_to_mean)} pts
           </p>
         )}
       </div>
@@ -102,9 +103,9 @@ function CommonOpportunitiesSection({
                 {win1?.area_name || win2?.area_name || area}
               </span>
               <div className="text-xs text-gray-600 mt-1">
-                {school1Name.slice(0, 15)}: +{win1?.expected_gain.toFixed(0) || '?'} pts
+                {school1Name.slice(0, 15)}: +{win1?.expected_gain !== undefined ? formatTriScore(win1.expected_gain) : '?'} pts
                 <br />
-                {school2Name.slice(0, 15)}: +{win2?.expected_gain.toFixed(0) || '?'} pts
+                {school2Name.slice(0, 15)}: +{win2?.expected_gain !== undefined ? formatTriScore(win2.expected_gain) : '?'} pts
               </div>
             </div>
           );
@@ -188,7 +189,7 @@ export default function QuickWinsComparison({
               {school1Name.slice(0, 25)}
             </span>
             <span className="text-lg font-bold text-blue-700">
-              +{total1.toFixed(0)} pts
+              +{formatTriScore(total1)} pts
             </span>
           </div>
           <p className="text-xs text-blue-600 mt-1">
@@ -202,7 +203,7 @@ export default function QuickWinsComparison({
               {school2Name.slice(0, 25)}
             </span>
             <span className="text-lg font-bold text-green-700">
-              +{total2.toFixed(0)} pts
+              +{formatTriScore(total2)} pts
             </span>
           </div>
           <p className="text-xs text-green-600 mt-1">
@@ -267,9 +268,9 @@ export default function QuickWinsComparison({
           <p className="text-sm text-amber-800">
             <strong>💡 Insight:</strong>{' '}
             {total1 > total2
-              ? `${school1Name.slice(0, 20)} tem mais margem para crescimento (+${(total1 - total2).toFixed(0)} pts de potencial a mais)`
+              ? `${school1Name.slice(0, 20)} tem mais margem para crescimento (+${formatTriScore(total1 - total2)} pts de potencial a mais)`
               : total2 > total1
-              ? `${school2Name.slice(0, 20)} tem mais margem para crescimento (+${(total2 - total1).toFixed(0)} pts de potencial a mais)`
+              ? `${school2Name.slice(0, 20)} tem mais margem para crescimento (+${formatTriScore(total2 - total1)} pts de potencial a mais)`
               : 'Ambas as escolas têm potencial de melhoria similar'}
           </p>
         </div>

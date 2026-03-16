@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, TopSchool } from '@/lib/api';
 import { Trophy, Target, TrendingUp, ChevronRight, Search, MapPin } from 'lucide-react';
+import { formatTriScore } from '@/lib/utils';
 
 interface SimilarSchoolsSuggestionsProps {
   schoolCode: string;
@@ -173,7 +174,7 @@ export default function SimilarSchoolsSuggestions({
                         school.codigo_inep,
                         school.nome_escola,
                         <p className="text-sm text-gray-500">
-                          #{school.ranking} Brasil • {school.nota_media?.toFixed(0)} pts
+                          #{school.ranking} Brasil • {formatTriScore(school.nota_media)} pts
                         </p>
                       )
                     )}
@@ -199,7 +200,7 @@ export default function SimilarSchoolsSuggestions({
                         school.codigo_inep,
                         school.nome_escola,
                         <p className="text-sm text-gray-500">
-                          #{school.ranking} Brasil • {school.nota_media?.toFixed(0)} pts
+                          #{school.ranking} Brasil • {formatTriScore(school.nota_media)} pts
                         </p>
                       )
                     )}
@@ -232,7 +233,7 @@ export default function SimilarSchoolsSuggestions({
                         school.codigo_inep,
                         school.nome_escola,
                         <p className="text-sm text-purple-600 font-medium">
-                          #{school.ranking} Brasil • {school.nota_media?.toFixed(0)} pts
+                          #{school.ranking} Brasil • {formatTriScore(school.nota_media)} pts
                         </p>
                       )
                     )}

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
-import { formatNumber, formatRanking } from '@/lib/utils';
+import { formatNumber, formatRanking, formatTriScore } from '@/lib/utils';
 import Link from 'next/link';
 import { ArrowLeft, TrendingUp, TrendingDown, Award, BookOpen, Calculator, PenTool, Grid3X3, AlertTriangle, CheckCircle, Lightbulb, Brain, Target, Users, Sparkles, ChevronRight, Activity, BarChart3, GraduationCap } from 'lucide-react';
 import { BrainXInsights } from '@/components/gliner/GLiNERInsights';
@@ -198,7 +198,7 @@ export default function SchoolDetailPage() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Média</p>
-              <p className="text-3xl font-bold text-sky-500 mt-1">{formatNumber(latestScore?.nota_media)}</p>
+              <p className="text-3xl font-bold text-sky-500 mt-1">{formatTriScore(latestScore?.nota_media)}</p>
               {mediaChange && (
                 <div className={`flex items-center gap-1 mt-2 text-xs font-medium ${parseFloat(mediaChange) >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                   {parseFloat(mediaChange) >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
@@ -236,7 +236,7 @@ export default function SchoolDetailPage() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Redação</p>
-              <p className="text-3xl font-bold text-cyan-600 mt-1">{formatNumber(latestScore?.nota_redacao)}</p>
+              <p className="text-3xl font-bold text-cyan-600 mt-1">{formatTriScore(latestScore?.nota_redacao)}</p>
               <p className="text-xs text-gray-400 mt-2">{((latestScore?.nota_redacao || 0) / 10).toFixed(0)}% do máx</p>
             </div>
             <div className="h-12 w-12 rounded-xl bg-cyan-100 flex items-center justify-center">
@@ -250,7 +250,7 @@ export default function SchoolDetailPage() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Matemática</p>
-              <p className="text-3xl font-bold text-orange-500 mt-1">{formatNumber(latestScore?.nota_mt)}</p>
+              <p className="text-3xl font-bold text-orange-500 mt-1">{formatTriScore(latestScore?.nota_mt)}</p>
               <p className="text-xs text-gray-400 mt-2">{((latestScore?.nota_mt || 0) / 10).toFixed(0)}% do máx</p>
             </div>
             <div className="h-12 w-12 rounded-xl bg-orange-100 flex items-center justify-center">
@@ -311,6 +311,7 @@ export default function SchoolDetailPage() {
               tickLine={false}
               tick={{ fill: '#94a3b8', fontSize: 12 }}
               width={45}
+              tickFormatter={(value) => typeof value === 'number' ? formatTriScore(value) : value}
             />
             <Tooltip
               contentStyle={{
@@ -340,7 +341,7 @@ export default function SchoolDetailPage() {
                   fill="#64748b"
                   fontSize={11}
                   fontWeight={600}
-                  formatter={(value) => typeof value === 'number' ? value.toFixed(0) : value}
+                  formatter={(value) => typeof value === 'number' ? formatTriScore(value) : value}
                 />
               </Line>
             ))}
@@ -389,7 +390,7 @@ export default function SchoolDetailPage() {
                         </div>
                       </td>
                       <td className={`px-4 py-3 text-right font-semibold ${isSelected ? 'text-sky-500' : 'text-gray-900'}`}>
-                        {formatNumber(item.nota)}
+                        {formatTriScore(item.nota)}
                       </td>
                       <td className="px-4 py-3 text-right text-gray-500 font-medium">{((item.nota / item.max) * 100).toFixed(0)}%</td>
                     </tr>
@@ -416,7 +417,7 @@ export default function SchoolDetailPage() {
                     </div>
                   </td>
                   <td className={`px-4 py-3 text-right font-semibold ${selectedAreas.includes('Média') ? 'text-sky-500' : 'text-gray-900'}`}>
-                    {formatNumber(latestScore?.nota_media)}
+                    {formatTriScore(latestScore?.nota_media)}
                   </td>
                   <td className="px-4 py-3 text-right text-gray-500 font-medium">
                     {latestScore?.nota_media ? ((latestScore.nota_media / 1000) * 100).toFixed(0) : 0}%
@@ -448,7 +449,7 @@ export default function SchoolDetailPage() {
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value, name) => [typeof value === 'number' ? formatNumber(value) : value, name]}
+                  formatter={(value, name) => [typeof value === 'number' ? formatTriScore(value) : value, name]}
                   contentStyle={{
                     backgroundColor: 'white',
                     border: 'none',
@@ -463,7 +464,7 @@ export default function SchoolDetailPage() {
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="text-center">
                 <p className="text-3xl font-bold text-gray-900">{((totalScore / 5000) * 100).toFixed(0)}%</p>
-                <p className="text-xs text-gray-500 font-medium">{formatNumber(totalScore)}</p>
+                <p className="text-xs text-gray-500 font-medium">{formatTriScore(totalScore)}</p>
               </div>
             </div>
           </div>
@@ -485,7 +486,7 @@ export default function SchoolDetailPage() {
               <div key={item.name}>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-gray-700">{item.name}</span>
-                  <span className="text-sm font-bold text-gray-900">{formatNumber(item.nota)}</span>
+                  <span className="text-sm font-bold text-gray-900">{formatTriScore(item.nota)}</span>
                 </div>
                 <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
                   <div
@@ -536,13 +537,13 @@ export default function SchoolDetailPage() {
                       </span>
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-right font-bold ${isLatest ? 'text-sky-500' : 'text-gray-900'}`}>
-                      {formatNumber(h.nota_media)}
+                      {formatTriScore(h.nota_media)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-gray-600 font-medium">{formatNumber(h.nota_cn)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-gray-600 font-medium">{formatNumber(h.nota_ch)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-gray-600 font-medium">{formatNumber(h.nota_lc)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-gray-600 font-medium">{formatNumber(h.nota_mt)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-gray-600 font-medium">{formatNumber(h.nota_redacao)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-gray-600 font-medium">{formatTriScore(h.nota_cn)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-gray-600 font-medium">{formatTriScore(h.nota_ch)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-gray-600 font-medium">{formatTriScore(h.nota_lc)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-gray-600 font-medium">{formatTriScore(h.nota_mt)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-gray-600 font-medium">{formatTriScore(h.nota_redacao)}</td>
                   </tr>
                 );
               })}
@@ -590,7 +591,7 @@ export default function SchoolDetailPage() {
                         {mediaPresentation.badge_text || 'Projeção conservadora'}
                       </p>
                       <p className="mt-1 text-xs text-amber-700">
-                        {mediaPresentation.confidence_interval.low.toFixed(0)} - {mediaPresentation.confidence_interval.high.toFixed(0)} pontos
+                        {formatTriScore(mediaPresentation.confidence_interval.low)} - {formatTriScore(mediaPresentation.confidence_interval.high)} pontos
                       </p>
                     </div>
                   ) : (
@@ -610,7 +611,7 @@ export default function SchoolDetailPage() {
                         <div key={area} className="flex justify-between text-xs">
                           <span className="text-gray-500 uppercase font-medium">{area}</span>
                           <span className="font-bold text-gray-700">
-                            {Number(score).toFixed(0)}
+                            {formatTriScore(Number(score))}
                             {presentation?.display_mode === 'range' ? ' faixa' : ''}
                           </span>
                         </div>
@@ -708,7 +709,7 @@ export default function SchoolDetailPage() {
                     <div key={idx} className="flex items-start gap-2 text-xs">
                       <ChevronRight className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
                       <span className="text-gray-600 leading-relaxed">
-                        <span className="font-bold text-gray-900">{qw.area_name}:</span> +{qw.expected_gain.toFixed(0)} pts
+                        <span className="font-bold text-gray-900">{qw.area_name}:</span> +{formatTriScore(qw.expected_gain)} pts
                       </span>
                     </div>
                   ))}
@@ -747,7 +748,7 @@ export default function SchoolDetailPage() {
                       <div>
                         <p className="text-sm font-semibold text-gray-900">{area.area_name}</p>
                         <p className="text-xs text-gray-500 mt-1 font-medium">
-                          Score: {area.school_score.toFixed(0)} | Nacional: {area.national_avg.toFixed(0)}
+                          Score: {formatTriScore(area.school_score)} | Nacional: {formatTriScore(area.national_avg)}
                         </p>
                       </div>
                       <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${
@@ -755,7 +756,7 @@ export default function SchoolDetailPage() {
                         area.gap_to_national < 0 ? 'bg-yellow-100 text-yellow-700' :
                         'bg-green-100 text-green-700'
                       }`}>
-                        {area.gap_to_national >= 0 ? '+' : ''}{area.gap_to_national.toFixed(0)}
+                        {area.gap_to_national >= 0 ? '+' : ''}{formatTriScore(area.gap_to_national)}
                       </span>
                     </div>
                   </div>

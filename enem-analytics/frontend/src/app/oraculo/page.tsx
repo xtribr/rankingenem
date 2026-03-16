@@ -3,6 +3,7 @@
 import { Fragment, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, OraclePrediction, OracleResponse } from '@/lib/api';
+import { formatTriScore } from '@/lib/utils';
 import Link from 'next/link';
 import {
   Sparkles,
@@ -328,7 +329,7 @@ export default function OraculoPage() {
                                     <div>
                                       <p className="text-[10px] text-slate-400 uppercase">TRI Médio</p>
                                       <p className={`text-lg font-bold ${getDifficultyLabel(pred.base_cientifica.tri_medio).color} px-2 py-0.5 rounded inline-block`}>
-                                        {pred.base_cientifica.tri_medio.toFixed(0)}
+                                        {formatTriScore(pred.base_cientifica.tri_medio)}
                                       </p>
                                     </div>
                                     <div>

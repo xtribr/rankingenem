@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { formatTriScore } from '@/lib/utils';
 import {
   Search,
   TrendingUp,
@@ -371,7 +372,7 @@ export default function ComparePage() {
                     <TrendingUp className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-gray-900">{school1Score.toFixed(0)}</p>
+                    <p className="text-2xl font-bold text-gray-900">{formatTriScore(school1Score)}</p>
                     <p className="text-sm text-gray-500">Média Escola 1</p>
                   </div>
                 </div>
@@ -384,7 +385,7 @@ export default function ComparePage() {
                     <TrendingUp className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-gray-900">{school2Score.toFixed(0)}</p>
+                    <p className="text-2xl font-bold text-gray-900">{formatTriScore(school2Score)}</p>
                     <p className="text-sm text-gray-500">Média Escola 2</p>
                   </div>
                 </div>
@@ -576,9 +577,9 @@ export default function ComparePage() {
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-medium text-gray-700">{area.name}</span>
                         <div className="flex items-center gap-3">
-                          <span className="text-sm font-semibold" style={{ color: COLORS.blue }}>{area.escola1.toFixed(0)}</span>
+                          <span className="text-sm font-semibold" style={{ color: COLORS.blue }}>{formatTriScore(area.escola1)}</span>
                           <span className="text-gray-300">|</span>
-                          <span className="text-sm font-semibold" style={{ color: COLORS.green }}>{area.escola2.toFixed(0)}</span>
+                          <span className="text-sm font-semibold" style={{ color: COLORS.green }}>{formatTriScore(area.escola2)}</span>
                         </div>
                       </div>
                       <div className="flex gap-1 h-2">

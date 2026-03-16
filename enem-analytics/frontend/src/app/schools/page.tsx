@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { formatNumber, formatRanking } from '@/lib/utils';
+import { formatNumber, formatRanking, formatTriScore } from '@/lib/utils';
 import Link from 'next/link';
 import { Search, ChevronLeft, ChevronRight, Bell, School as SchoolIcon } from 'lucide-react';
 
@@ -237,7 +237,7 @@ export default function SchoolsPage() {
                         {school.qt_matriculas ? formatNumber(school.qt_matriculas) : '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right font-semibold text-gray-900">
-                        {formatNumber(school.ultima_nota)}
+                        {formatTriScore(school.ultima_nota)}
                       </td>
                     </tr>
                   ))}

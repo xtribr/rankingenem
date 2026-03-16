@@ -11,6 +11,7 @@ import {
   Tooltip,
 } from 'recharts';
 import { DiagnosisComparisonResult } from '@/lib/api';
+import { formatTriScore } from '@/lib/utils';
 
 interface RadarComparisonProps {
   diagnosisComparison: DiagnosisComparisonResult;
@@ -65,6 +66,7 @@ export default function RadarComparison({
             domain={[400, 900]}
             tick={{ fill: '#6b7280', fontSize: 10 }}
             tickCount={6}
+            tickFormatter={(value) => typeof value === 'number' ? formatTriScore(value) : value}
           />
 
           {/* TOP Brasil reference */}
@@ -101,7 +103,7 @@ export default function RadarComparison({
           />
 
           <Tooltip
-            formatter={(value) => [(value as number).toFixed(0) + ' pts']}
+            formatter={(value) => [formatTriScore(value as number) + ' pts']}
             contentStyle={{
               backgroundColor: 'white',
               border: '1px solid #e5e7eb',

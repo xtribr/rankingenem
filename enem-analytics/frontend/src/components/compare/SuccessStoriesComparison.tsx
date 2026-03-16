@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { api, SuccessStory } from '@/lib/api';
 import { Star, TrendingUp, Users, Sparkles, Loader2, ArrowUpRight, School } from 'lucide-react';
+import { formatTriScore } from '@/lib/utils';
 
 interface SuccessStoriesComparisonProps {
   school1Code: string;
@@ -56,7 +57,7 @@ function SuccessStoryCard({ story, schoolColor }: { story: SuccessStory; schoolC
           </div>
           <div className={`flex items-center gap-1 px-2 py-1 rounded-full ${schoolColor === 'blue' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
             <TrendingUp className="h-3 w-3" />
-            <span className="text-xs font-bold">+{story.improvement.toFixed(0)}</span>
+            <span className="text-xs font-bold">+{formatTriScore(story.improvement)}</span>
           </div>
         </div>
       </div>
@@ -67,7 +68,7 @@ function SuccessStoryCard({ story, schoolColor }: { story: SuccessStory; schoolC
         <div className={`flex items-center gap-2 mb-3 p-2 rounded-lg ${AREA_BG[topAreaCode]}`}>
           <Sparkles className={`h-4 w-4 ${AREA_COLORS[topAreaCode]}`} />
           <span className={`text-sm font-medium ${AREA_COLORS[topAreaCode]}`}>
-            {(story as SuccessStory & { key_insight?: string }).key_insight || `+${topArea[1].change.toFixed(0)} pts em ${topAreaCode}`}
+            {(story as SuccessStory & { key_insight?: string }).key_insight || `+${formatTriScore(topArea[1].change)} pts em ${topAreaCode}`}
           </span>
         </div>
 
@@ -80,10 +81,10 @@ function SuccessStoryCard({ story, schoolColor }: { story: SuccessStory; schoolC
               </span>
               <div className="flex items-center gap-2">
                 <span className="text-gray-400 text-xs">
-                  {data.before.toFixed(0)} → {data.after.toFixed(0)}
+                  {formatTriScore(data.before)} → {formatTriScore(data.after)}
                 </span>
                 <span className={`font-semibold ${data.change > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {data.change > 0 ? '+' : ''}{data.change.toFixed(0)}
+                  {data.change > 0 ? '+' : ''}{formatTriScore(data.change)}
                 </span>
               </div>
             </div>
@@ -145,7 +146,7 @@ function InsightPanel({
             <strong className="text-blue-600">{school1Name.slice(0, 20)}</strong>
           </p>
           <ul className="space-y-1 text-gray-700">
-            <li>• Escolas similares melhoraram em média <strong>+{avgImprovement1.toFixed(0)} pts</strong></li>
+            <li>• Escolas similares melhoraram em média <strong>+{formatTriScore(avgImprovement1)} pts</strong></li>
             {patterns1.length > 0 && (
               <li>• Principal foco: <strong className={AREA_COLORS[patterns1[0][0]]}>
                 {patterns1[0][0] === 'redacao' ? 'Redação' : patterns1[0][0]}
@@ -159,7 +160,7 @@ function InsightPanel({
             <strong className="text-green-600">{school2Name.slice(0, 20)}</strong>
           </p>
           <ul className="space-y-1 text-gray-700">
-            <li>• Escolas similares melhoraram em média <strong>+{avgImprovement2.toFixed(0)} pts</strong></li>
+            <li>• Escolas similares melhoraram em média <strong>+{formatTriScore(avgImprovement2)} pts</strong></li>
             {patterns2.length > 0 && (
               <li>• Principal foco: <strong className={AREA_COLORS[patterns2[0][0]]}>
                 {patterns2[0][0] === 'redacao' ? 'Redação' : patterns2[0][0]}

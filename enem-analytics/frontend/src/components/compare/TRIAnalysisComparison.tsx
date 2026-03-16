@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { api, TRIAnalysisResult } from '@/lib/api';
 import { BarChart3, Brain, Target, Loader2, TrendingUp, BookOpen, Zap } from 'lucide-react';
+import { formatTriScore } from '@/lib/utils';
 
 interface TRIAnalysisComparisonProps {
   school1Code: string;
@@ -88,7 +89,7 @@ function AreaComparisonRow({
         </div>
         <MasteryBar level={mastery1} color="bg-blue-500" />
         <div className="flex justify-between text-xs text-gray-500 mt-1">
-          <span>Nota: {score1.toFixed(0)}</span>
+          <span>Nota: {formatTriScore(score1)}</span>
           <span>{getMasteryLabel(mastery1).label}</span>
         </div>
       </div>
@@ -101,7 +102,7 @@ function AreaComparisonRow({
         </div>
         <MasteryBar level={mastery2} color="bg-green-500" />
         <div className="flex justify-between text-xs text-gray-500 mt-1">
-          <span>Nota: {score2.toFixed(0)}</span>
+          <span>Nota: {formatTriScore(score2)}</span>
           <span>{getMasteryLabel(mastery2).label}</span>
         </div>
       </div>
@@ -156,9 +157,9 @@ function ContentSampleCard({
           <div key={idx} className="text-xs">
             <div className="flex items-center gap-2">
               <span className={`font-mono font-bold ${textColor}`}>{item.skill}</span>
-              <span className="text-gray-500">TRI {item.tri_score.toFixed(0)}</span>
+              <span className="text-gray-500">TRI {formatTriScore(item.tri_score)}</span>
               {item.gap && (
-                <span className="text-amber-600 font-medium">+{item.gap.toFixed(0)} gap</span>
+                <span className="text-amber-600 font-medium">+{formatTriScore(item.gap)} gap</span>
               )}
             </div>
             <p className="text-gray-600 truncate" title={item.description}>
