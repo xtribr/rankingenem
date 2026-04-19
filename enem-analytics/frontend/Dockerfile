@@ -11,8 +11,10 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Install pnpm — pin to 8.15.9 because pnpm-lock.yaml is lockfileVersion 6.0
+# (pnpm 8.x). pnpm 9+ uses lockfileVersion 9.0 and --frozen-lockfile rejects
+# older lockfiles. Keep this in sync with "packageManager" in package.json.
+RUN corepack enable && corepack prepare pnpm@8.15.9 --activate
 
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
