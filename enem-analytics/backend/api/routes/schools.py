@@ -10,14 +10,9 @@ from api.auth.authorization import get_authorized_school_user
 from api.auth.supabase_dependencies import UserProfile, get_current_admin
 from data.year_resolver import find_latest_skills_file, get_file_year
 
-# Supabase-based data layer
-from data.supabase_store import (
-    list_schools as duckdb_list_schools,
-    get_top_schools as duckdb_get_top_schools,
-    search_schools as duckdb_search_schools,
-    get_school_detail as duckdb_get_school_detail,
-    get_stats as duckdb_get_stats,
-)
+# Supabase-backed data layer. Imported as a module so route handlers named
+# list_schools, search_schools, etc. don't collide with the store functions.
+from data import supabase_store
 
 router = APIRouter()
 
@@ -293,7 +288,7 @@ async def list_schools(
     _: UserProfile = Depends(get_current_admin),
 ):
     """
-    List schools with pagination and filtering (DuckDB optimized)
+    List schools with pagination and filtering.
 
     Filters:
     - uf: State code (e.g., SP, RJ, CE)
@@ -302,8 +297,7 @@ async def list_schools(
     - porte: 1-5 (1=Muito pequena, 2=Pequena, 3=Média, 4=Grande, 5=Muito grande)
     - search: Search by name or INEP code
     """
-    # Use DuckDB for fast SQL queries
-    records = duckdb_list_schools(
+    records = supabase_store.list_schools(
         page=page,
         limit=limit,
         search=search,
@@ -345,7 +339,7 @@ async def get_top_schools(
     _: UserProfile = Depends(get_current_admin),
 ):
     """
-    Get top ranked schools (DuckDB optimized)
+    Get top ranked schools.
 
     Filters:
     - uf: State code (e.g., SP, RJ, CE)
@@ -353,8 +347,7 @@ async def get_top_schools(
     - localizacao: "Urbana" or "Rural"
     - porte: 1-5 (1=Muito pequena, 2=Pequena, 3=Média, 4=Grande, 5=Muito grande)
     """
-    # Use DuckDB for fast SQL queries
-    return duckdb_get_top_schools(
+    return supabase_store.get_top_schools(
         limit=limit,
         ano=ano,
         uf=uf,
@@ -371,10 +364,9 @@ async def search_schools(
     _: UserProfile = Depends(get_current_admin),
 ):
     """
-    Quick search for schools by name or INEP code (DuckDB optimized)
+    Quick search for schools by name or INEP code.
     """
-    # Use DuckDB for fast SQL queries
-    return duckdb_search_schools(q=q, limit=limit)
+    return supabase_store.search_schools(q=q, limit=limit)
 
 
 @router.get("/{codigo_inep}", response_model=SchoolDetail)
@@ -383,10 +375,9 @@ async def get_school(
     _: UserProfile = Depends(get_authorized_school_user),
 ):
     """
-    Get detailed information for a specific school (DuckDB optimized)
+    Get detailed information for a specific school.
     """
-    # Use DuckDB for fast SQL queries
-    result = duckdb_get_school_detail(codigo_inep)
+    result = supabase_store.get_school_detail(codigo_inep)
 
     if result is None:
         raise HTTPException(status_code=404, detail=f"School {codigo_inep} not found")
