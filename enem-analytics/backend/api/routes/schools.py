@@ -429,7 +429,8 @@ async def get_school_history(
     client = get_supabase_store()
     result = client.table("enem_results").select(
         "ano, nome_escola, uf, dependencia, media_cn, media_ch, media_lc, "
-        "media_mt, media_redacao, media_geral, ranking_nacional, ranking_uf"
+        "media_mt, media_redacao, media_geral, ranking_nacional, ranking_uf, "
+        "desempenho_habilidades, competencia_redacao_media, nota_tri_media"
     ).eq("codigo_inep", codigo_inep).order("ano").execute()
 
     if not result.data:
@@ -463,8 +464,9 @@ async def get_school_history(
             "nota_lc": float(row["media_lc"]) if row.get("media_lc") else None,
             "nota_mt": float(row["media_mt"]) if row.get("media_mt") else None,
             "nota_redacao": float(row["media_redacao"]) if row.get("media_redacao") else None,
-            "desempenho_habilidades": None,
-            "competencia_redacao_media": None,
+            "nota_tri_media": float(row["nota_tri_media"]) if row.get("nota_tri_media") is not None else None,
+            "desempenho_habilidades": float(row["desempenho_habilidades"]) if row.get("desempenho_habilidades") is not None else None,
+            "competencia_redacao_media": float(row["competencia_redacao_media"]) if row.get("competencia_redacao_media") is not None else None,
         })
         prev_ranking = ranking
         prev_nota = nota

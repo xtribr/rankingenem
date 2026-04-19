@@ -1,15 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { getNextEnemYear } from '@/lib/enem-cycle';
 import { formatRanking, formatTriScore } from '@/lib/utils';
 import Link from 'next/link';
-import { ArrowLeft, TrendingUp, TrendingDown, Award, BookOpen, Calculator, PenTool, Grid3X3, AlertTriangle, CheckCircle, Lightbulb, Brain, Target, Users, Sparkles, ChevronRight, Activity, BarChart3, GraduationCap } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Award, BookOpen, Calculator, PenTool, Grid3X3, AlertTriangle, CheckCircle, Lightbulb, Brain, Target, Users, Sparkles, ChevronRight, Activity, BarChart3, GraduationCap, LayoutDashboard, History, Microscope } from 'lucide-react';
 import { BrainXInsights } from '@/components/gliner/GLiNERInsights';
 import TRIAnalysis from '@/components/predictions/TRIAnalysis';
+import { Tabs, TabPanel, type TabDefinition } from '@/components/ui/tabs';
+import { Skeleton, StatCardSkeleton } from '@/components/ui/skeleton';
 import {
   LineChart,
   Line,
@@ -66,10 +68,42 @@ export default function SchoolDetailPage() {
   // Selected areas for chart - state for interactive selection (must be before early returns)
   const [selectedAreas, setSelectedAreas] = useState<string[]>(['Média']);
 
+  const TABS: TabDefinition[] = [
+    { id: 'overview', label: 'Visão Geral', icon: LayoutDashboard },
+    { id: 'historico', label: 'Histórico', icon: History },
+    { id: 'analise', label: 'Análise ML', icon: Brain },
+    { id: 'tri', label: 'TRI', icon: Microscope },
+    { id: 'insights', label: 'Conceitos', icon: Sparkles },
+  ];
+
+  const [activeTab, setActiveTab] = useState<string>('overview');
+
+  // Keep the tab in sync with the URL hash so deep links work.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const initial = window.location.hash.replace('#', '');
+    if (TABS.some((t) => t.id === initial)) {
+      setActiveTab(initial);
+    }
+  }, []);
+
+  const handleTabChange = (id: string) => {
+    setActiveTab(id);
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', `#${id}`);
+    }
+  };
+
   if (schoolLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
+        <Skeleton className="h-40 rounded-3xl" />
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <StatCardSkeleton key={i} />
+          ))}
+        </div>
+        <Skeleton className="h-96 rounded-2xl" />
       </div>
     );
   }
@@ -155,9 +189,12 @@ export default function SchoolDetailPage() {
   ].sort((a, b) => b.nota - a.nota) : [];
 
   return (
-    <div className="space-y-6 pb-8">
-      {/* Header with gradient background */}
-      <div className="relative overflow-hidden rounded-3xl p-8 text-white" style={{ background: 'linear-gradient(135deg, #3ABFF8 0%, #38bdf8 50%, #F26A4B 100%)' }}>
+    <div className="p-6 space-y-6 pb-8 max-w-[1600px] mx-auto">
+      {/* Header */}
+      <div className="relative overflow-hidden rounded-3xl p-8 text-white bg-gradient-to-br from-slate-900 via-blue-900 to-blue-700">
+        {/* Subtle glow — kept inside to avoid the sharp gradient corners */}
+        <div className="pointer-events-none absolute -right-24 -top-24 w-72 h-72 rounded-full bg-sky-400/10 blur-3xl"></div>
+
         <div className="relative z-10">
           {/* Back button */}
           <Link
@@ -178,7 +215,7 @@ export default function SchoolDetailPage() {
                 {school.tipo_escola && (
                   <>
                     <span className="text-white/40">•</span>
-                    <span className="px-3 py-1 rounded-full bg-white/20 text-xs font-medium backdrop-blur-sm">
+                    <span className="px-3 py-1 rounded-full bg-white/15 text-xs font-medium backdrop-blur-sm ring-1 ring-white/10">
                       {school.tipo_escola}
                     </span>
                   </>
@@ -187,10 +224,6 @@ export default function SchoolDetailPage() {
             </div>
           </div>
         </div>
-        {/* Decorative elements */}
-        <div className="absolute -right-20 -top-20 w-60 h-60 bg-white/10 rounded-full blur-3xl"></div>
-        <div className="absolute -left-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
-        <div className="absolute right-10 bottom-10 w-20 h-20 bg-white/5 rounded-full"></div>
       </div>
 
       {/* KPI Cards Row */}
@@ -281,6 +314,11 @@ export default function SchoolDetailPage() {
         </div>
       </div>
 
+      {/* Tab Navigation */}
+      <Tabs tabs={TABS} active={activeTab} onChange={handleTabChange} />
+
+      <TabPanel id="overview" active={activeTab}>
+      <div className="space-y-6">
       {/* Main Chart Section */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div className="flex items-center justify-between mb-6">
@@ -504,7 +542,10 @@ export default function SchoolDetailPage() {
           </div>
         </div>
       </div>
+      </div>
+      </TabPanel>
 
+      <TabPanel id="historico" active={activeTab}>
       {/* History Table */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
@@ -553,7 +594,9 @@ export default function SchoolDetailPage() {
           </table>
         </div>
       </div>
+      </TabPanel>
 
+      <TabPanel id="analise" active={activeTab}>
       {/* ML Analytics Section */}
       <div className="bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 rounded-2xl shadow-sm border border-indigo-100 overflow-hidden">
         <div className="px-6 py-5 border-b border-indigo-100/50 bg-white/60 backdrop-blur-sm">
@@ -783,12 +826,17 @@ export default function SchoolDetailPage() {
           </div>
         </div>
       </div>
+      </TabPanel>
 
-      {/* TRI Analysis Section */}
-      <TRIAnalysis codigoInep={codigo_inep} />
+      <TabPanel id="tri" active={activeTab}>
+        {/* TRI Analysis Section */}
+        <TRIAnalysis codigoInep={codigo_inep} />
+      </TabPanel>
 
-      {/* BrainX Insights Section */}
-      <BrainXInsights codigoInep={codigo_inep} />
+      <TabPanel id="insights" active={activeTab}>
+        {/* BrainX Insights Section */}
+        <BrainXInsights codigoInep={codigo_inep} />
+      </TabPanel>
     </div>
   );
 }

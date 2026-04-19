@@ -57,7 +57,39 @@ class ENEMPreprocessor:
         if tri_content_file.exists():
             # Use quoting=1 (QUOTE_ALL) to properly handle fields with commas
             self.tri_content_df = pd.read_csv(tri_content_file, quoting=1)
+            self.tri_content_df = self._sanitize_tri_scores(self.tri_content_df)
             print(f"Loaded {len(self.tri_content_df)} TRI content records")
+
+    # Valid ENEM TRI score range. Items outside this corridor are either
+    # corrupt exports or mislabeled raw difficulty parameters, and will bias
+    # the accessibility calculations if fed into the preprocessor.
+    TRI_SCORE_VALID_MIN = 300.0
+    TRI_SCORE_VALID_MAX = 900.0
+
+    def _sanitize_tri_scores(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Drop TRI content rows whose tri_score is outside the valid corridor.
+
+        Keeps rows with NaN tri_score (they simply won't contribute to stats).
+        """
+        if "tri_score" not in df.columns:
+            return df
+
+        scores = pd.to_numeric(df["tri_score"], errors="coerce")
+        invalid_mask = scores.notna() & (
+            (scores < self.TRI_SCORE_VALID_MIN) | (scores > self.TRI_SCORE_VALID_MAX)
+        )
+        n_invalid = int(invalid_mask.sum())
+        if n_invalid:
+            print(
+                f"  ⚠ Dropped {n_invalid} TRI content row(s) with tri_score outside "
+                f"[{self.TRI_SCORE_VALID_MIN:.0f}, {self.TRI_SCORE_VALID_MAX:.0f}] "
+                f"(min={scores[invalid_mask].min():.1f}, max={scores[invalid_mask].max():.1f})"
+            )
+        # Overwrite tri_score with the coerced numeric column so downstream code
+        # never sees strings that survived the original load.
+        df = df.copy()
+        df["tri_score"] = scores
+        return df[~invalid_mask].reset_index(drop=True)
 
     def _compute_tri_mappings(self):
         """Compute TRI difficulty mappings per skill and area"""

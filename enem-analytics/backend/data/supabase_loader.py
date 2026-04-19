@@ -8,9 +8,12 @@ Replaces the multiple pd.read_csv() calls across ML modules.
 import os
 import pandas as pd
 from io import BytesIO
+from pathlib import Path
 from typing import Optional
 from functools import lru_cache
 import logging
+
+from data.year_resolver import find_latest_enem_results_file
 
 logger = logging.getLogger(__name__)
 
@@ -21,13 +24,30 @@ SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 # Storage bucket name
 STORAGE_BUCKET = "enem"
 
-# File paths in Supabase Storage
+
+def _resolve_enem_storage_filename() -> str:
+    """Resolve the expected ENEM dataset filename in Supabase Storage.
+
+    Mirrors the latest ENEM file present in backend/data/ so imports of a new
+    year automatically shift the remote filename too.
+    """
+    backend_data_dir = Path(__file__).resolve().parent
+    latest = find_latest_enem_results_file(backend_data_dir)
+    if latest is None:
+        return "enem_2018_2024.csv"
+    # Strip the _completo suffix commonly used locally to match Storage naming
+    name = latest.name.replace("_completo", "")
+    return name
+
+
+# File paths in Supabase Storage — derived from local data so a new year rolls
+# the Storage filename forward without code edits.
 STORAGE_FILES = {
-    "enem_data": "enem_2018_2024.csv",
+    "enem_data": _resolve_enem_storage_filename(),
     "tri_content": "tri_content.csv",
     "skills": "skills.csv",
     "skill_performance": "skill_performance.csv",
-    "gliner_cache": "gliner_cache.json"
+    "gliner_cache": "gliner_cache.json",
 }
 
 

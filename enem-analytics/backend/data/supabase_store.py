@@ -3,14 +3,23 @@ Supabase-based data store for ENEM school queries.
 Replaces DuckDB + CSV - data lives in Supabase Postgres.
 """
 
+import logging
 import os
+from pathlib import Path
 from typing import Optional, List, Dict, Any
+
 from supabase import create_client, Client
+
+from data.year_resolver import find_latest_enem_results_file, get_file_year
+
+logger = logging.getLogger(__name__)
 
 _client: Optional[Client] = None
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+
+_BACKEND_DATA_DIR = Path(__file__).resolve().parent
 
 
 def get_client() -> Client:
@@ -31,10 +40,29 @@ def init_database():
     print(f"Supabase connected: {result.count:,} enem_results records")
 
 
+def _fallback_latest_year_from_files() -> Optional[int]:
+    latest_file = find_latest_enem_results_file(_BACKEND_DATA_DIR)
+    if latest_file is None:
+        return None
+    return get_file_year(latest_file)
+
+
 def get_latest_year() -> int:
     client = get_client()
     result = client.table("enem_results").select("ano").order("ano", desc=True).limit(1).execute()
-    return result.data[0]["ano"] if result.data else 2024
+    if result.data:
+        return int(result.data[0]["ano"])
+
+    file_year = _fallback_latest_year_from_files()
+    if file_year is not None:
+        logger.warning(
+            "Supabase enem_results empty; falling back to latest file year=%s", file_year
+        )
+        return file_year
+
+    raise RuntimeError(
+        "Unable to determine latest ENEM year: Supabase empty and no data files found"
+    )
 
 
 def list_schools(
@@ -55,7 +83,8 @@ def list_schools(
 
     query = client.table("enem_results").select(
         "codigo_inep, nome_escola, uf, dependencia, media_geral, "
-        "ranking_nacional, ranking_uf, num_participantes"
+        "ranking_nacional, ranking_uf, num_participantes, "
+        "localizacao, porte, porte_label, anos_participacao"
     ).eq("ano", target_ano)
 
     if search:
@@ -64,6 +93,10 @@ def list_schools(
         query = query.eq("uf", uf.upper())
     if tipo_escola:
         query = query.eq("dependencia", tipo_escola)
+    if localizacao:
+        query = query.eq("localizacao", localizacao)
+    if porte is not None:
+        query = query.eq("porte", porte)
 
     if order_by == "ranking":
         query = query.not_.is_("ranking_nacional", "null")
@@ -83,13 +116,13 @@ def list_schools(
             "nome_escola": r["nome_escola"],
             "uf": r.get("uf"),
             "tipo_escola": r.get("dependencia"),
-            "localizacao": None,
-            "porte": None,
-            "porte_label": None,
+            "localizacao": r.get("localizacao"),
+            "porte": r.get("porte"),
+            "porte_label": r.get("porte_label"),
             "qt_matriculas": r.get("num_participantes"),
             "ultimo_ranking": r.get("ranking_nacional"),
             "ultima_nota": float(r["media_geral"]) if r.get("media_geral") else None,
-            "anos_participacao": None,
+            "anos_participacao": r.get("anos_participacao"),
         })
     return schools
 
@@ -108,16 +141,41 @@ def get_top_schools(
     query = client.table("enem_results").select(
         "ranking_nacional, codigo_inep, nome_escola, uf, dependencia, "
         "num_participantes, media_geral, media_cn, media_ch, media_lc, "
-        "media_mt, media_redacao"
+        "media_mt, media_redacao, localizacao, porte, porte_label, "
+        "desempenho_habilidades, competencia_redacao_media"
     ).eq("ano", target_ano).not_.is_("ranking_nacional", "null")
 
     if uf:
         query = query.eq("uf", uf.upper())
     if tipo_escola:
         query = query.eq("dependencia", tipo_escola)
+    if localizacao:
+        query = query.eq("localizacao", localizacao)
+    if porte is not None:
+        query = query.eq("porte", porte)
 
     query = query.order("ranking_nacional").limit(limit)
     result = query.execute()
+
+    # Bulk-fetch history for the returned schools so the frontend can draw
+    # sparklines without firing N round-trips per dashboard load.
+    inep_codes = [r["codigo_inep"] for r in result.data]
+    history_by_inep: Dict[str, List[Dict[str, Any]]] = {}
+    if inep_codes:
+        hist_result = (
+            client.table("enem_results")
+            .select("codigo_inep, ano, media_geral")
+            .in_("codigo_inep", inep_codes)
+            .order("ano")
+            .execute()
+        )
+        for row in hist_result.data or []:
+            if row.get("media_geral") is None:
+                continue
+            history_by_inep.setdefault(row["codigo_inep"], []).append({
+                "ano": int(row["ano"]),
+                "nota_media": float(row["media_geral"]),
+            })
 
     schools = []
     for r in result.data:
@@ -127,9 +185,9 @@ def get_top_schools(
             "nome_escola": r["nome_escola"],
             "uf": r.get("uf"),
             "tipo_escola": r.get("dependencia"),
-            "localizacao": None,
-            "porte": None,
-            "porte_label": None,
+            "localizacao": r.get("localizacao"),
+            "porte": r.get("porte"),
+            "porte_label": r.get("porte_label"),
             "qt_matriculas": r.get("num_participantes"),
             "nota_media": float(r["media_geral"]) if r.get("media_geral") else None,
             "nota_cn": float(r["media_cn"]) if r.get("media_cn") else None,
@@ -137,8 +195,9 @@ def get_top_schools(
             "nota_lc": float(r["media_lc"]) if r.get("media_lc") else None,
             "nota_mt": float(r["media_mt"]) if r.get("media_mt") else None,
             "nota_redacao": float(r["media_redacao"]) if r.get("media_redacao") else None,
-            "desempenho_habilidades": None,
-            "competencia_redacao_media": None,
+            "desempenho_habilidades": float(r["desempenho_habilidades"]) if r.get("desempenho_habilidades") is not None else None,
+            "competencia_redacao_media": float(r["competencia_redacao_media"]) if r.get("competencia_redacao_media") is not None else None,
+            "history": history_by_inep.get(r["codigo_inep"], []),
         })
 
     return {
@@ -177,7 +236,8 @@ def get_school_detail(codigo_inep: str) -> Optional[Dict[str, Any]]:
 
     result = client.table("enem_results").select(
         "ano, media_cn, media_ch, media_lc, media_mt, media_redacao, "
-        "media_geral, ranking_nacional, ranking_uf, nome_escola, uf, dependencia"
+        "media_geral, ranking_nacional, ranking_uf, nome_escola, uf, dependencia, "
+        "desempenho_habilidades, competencia_redacao_media"
     ).eq("codigo_inep", codigo_inep).order("ano").execute()
 
     if not result.data:
@@ -194,8 +254,9 @@ def get_school_detail(codigo_inep: str) -> Optional[Dict[str, Any]]:
             "nota_redacao": float(r["media_redacao"]) if r.get("media_redacao") else None,
             "nota_media": float(r["media_geral"]) if r.get("media_geral") else None,
             "ranking_brasil": r.get("ranking_nacional"),
-            "desempenho_habilidades": None,
-            "competencia_redacao_media": None,
+            "ranking_uf": r.get("ranking_uf"),
+            "desempenho_habilidades": float(r["desempenho_habilidades"]) if r.get("desempenho_habilidades") is not None else None,
+            "competencia_redacao_media": float(r["competencia_redacao_media"]) if r.get("competencia_redacao_media") is not None else None,
         })
 
     latest = result.data[-1]

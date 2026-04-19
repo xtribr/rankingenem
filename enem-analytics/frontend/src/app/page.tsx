@@ -5,11 +5,13 @@ import { api } from '@/lib/api';
 import { getLatestEnemYear, getNextEnemYear, getYearRangeLabel } from '@/lib/enem-cycle';
 import { formatNumber, formatTriScore } from '@/lib/utils';
 import Link from 'next/link';
-import { 
-  Trophy, School, Calendar, MapPin, Bell, Sparkles, 
+import {
+  Trophy, School, Calendar, MapPin, Bell, Sparkles,
   TrendingUp, Medal, Award, Target, BookOpen,
   ArrowRight, Star, Zap
 } from 'lucide-react';
+import { Sparkline } from '@/components/ui/sparkline';
+import { StatCardSkeleton, AreaCardSkeleton, TableRowSkeleton } from '@/components/ui/skeleton';
 
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useQuery({
@@ -21,17 +23,6 @@ export default function Dashboard() {
     queryKey: ['topSchools'],
     queryFn: () => api.getTopSchools(10),
   });
-
-  if (statsLoading || topLoading) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600"></div>
-          <p className="text-slate-500 font-medium">Carregando dashboard...</p>
-        </div>
-      </div>
-    );
-  }
 
   const today = new Date();
   const dateStr = today.toLocaleDateString('pt-BR', {
@@ -104,42 +95,53 @@ export default function Dashboard() {
 
         {/* Stats Cards - Novo Design */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-          <StatCard
-            icon={School}
-            label="Total de Escolas"
-            value={stats?.total_schools.toLocaleString('pt-BR') || '-'}
-            subtitle="Cadastradas no sistema"
-            trend="+5.2%"
-            trendUp={true}
-            color="blue"
-          />
-          <StatCard
-            icon={Calendar}
-            label="Anos de Dados"
-            value={`${stats?.years.length || 0}`}
-            subtitle={yearRangeLabel}
-            trend="Completo"
-            trendUp={true}
-            color="emerald"
-          />
-          <StatCard
-            icon={Trophy}
-            label="Total de Registros"
-            value={stats?.total_records.toLocaleString('pt-BR') || '-'}
-            subtitle="Notas analisadas"
-            trend="+12%"
-            trendUp={true}
-            color="amber"
-          />
-          <StatCard
-            icon={MapPin}
-            label="Cobertura"
-            value={`${stats?.states.length || 0}`}
-            subtitle="Estados + DF"
-            trend="100%"
-            trendUp={true}
-            color="violet"
-          />
+          {statsLoading ? (
+            <>
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+            </>
+          ) : (
+            <>
+              <StatCard
+                icon={School}
+                label="Total de Escolas"
+                value={stats?.total_schools.toLocaleString('pt-BR') || '-'}
+                subtitle="Cadastradas no sistema"
+                trend="+5.2%"
+                trendUp={true}
+                color="blue"
+              />
+              <StatCard
+                icon={Calendar}
+                label="Anos de Dados"
+                value={`${stats?.years.length || 0}`}
+                subtitle={yearRangeLabel}
+                trend="Completo"
+                trendUp={true}
+                color="emerald"
+              />
+              <StatCard
+                icon={Trophy}
+                label="Total de Registros"
+                value={stats?.total_records.toLocaleString('pt-BR') || '-'}
+                subtitle="Notas analisadas"
+                trend="+12%"
+                trendUp={true}
+                color="amber"
+              />
+              <StatCard
+                icon={MapPin}
+                label="Cobertura"
+                value={`${stats?.states.length || 0}`}
+                subtitle="Estados + DF"
+                trend="100%"
+                trendUp={true}
+                color="violet"
+              />
+            </>
+          )}
         </div>
 
         {/* Average Scores - Cards Interativos */}
@@ -154,51 +156,62 @@ export default function Dashboard() {
                 <p className="text-sm text-slate-500">Desempenho médio por área do conhecimento</p>
               </div>
             </div>
-            <span className="text-sm text-slate-400">Baseado em {stats?.total_records.toLocaleString('pt-BR')} registros</span>
+            <span className="text-sm text-slate-400">
+              {statsLoading ? 'Carregando base histórica…' : `Baseado em ${stats?.total_records.toLocaleString('pt-BR')} registros`}
+            </span>
           </div>
-          
+
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {[
-              { 
-                label: 'Ciências da Natureza', 
+            {statsLoading ? (
+              <>
+                <AreaCardSkeleton />
+                <AreaCardSkeleton />
+                <AreaCardSkeleton />
+                <AreaCardSkeleton />
+                <AreaCardSkeleton />
+              </>
+            ) : (
+              [
+              {
+                label: 'Ciências da Natureza',
                 shortLabel: 'Natureza',
-                value: stats?.avg_scores.nota_cn, 
+                value: stats?.avg_scores.nota_cn,
                 icon: '🧬',
                 gradient: 'from-emerald-500 to-teal-600',
                 bgColor: 'bg-emerald-50',
                 textColor: 'text-emerald-700'
               },
-              { 
-                label: 'Ciências Humanas', 
+              {
+                label: 'Ciências Humanas',
                 shortLabel: 'Humanas',
-                value: stats?.avg_scores.nota_ch, 
+                value: stats?.avg_scores.nota_ch,
                 icon: '📚',
                 gradient: 'from-blue-500 to-indigo-600',
                 bgColor: 'bg-blue-50',
                 textColor: 'text-blue-700'
               },
-              { 
-                label: 'Linguagens', 
+              {
+                label: 'Linguagens',
                 shortLabel: 'Linguagens',
-                value: stats?.avg_scores.nota_lc, 
+                value: stats?.avg_scores.nota_lc,
                 icon: '✍️',
                 gradient: 'from-violet-500 to-purple-600',
                 bgColor: 'bg-violet-50',
                 textColor: 'text-violet-700'
               },
-              { 
-                label: 'Matemática', 
+              {
+                label: 'Matemática',
                 shortLabel: 'Matemática',
-                value: stats?.avg_scores.nota_mt, 
+                value: stats?.avg_scores.nota_mt,
                 icon: '📐',
                 gradient: 'from-orange-500 to-amber-600',
                 bgColor: 'bg-orange-50',
                 textColor: 'text-orange-700'
               },
-              { 
-                label: 'Redação', 
+              {
+                label: 'Redação',
                 shortLabel: 'Redação',
-                value: stats?.avg_scores.nota_redacao, 
+                value: stats?.avg_scores.nota_redacao,
                 icon: '📝',
                 gradient: 'from-rose-500 to-pink-600',
                 bgColor: 'bg-rose-50',
@@ -222,7 +235,8 @@ export default function Dashboard() {
                   {item.label}
                 </p>
               </div>
-            ))}
+            ))
+            )}
           </div>
         </div>
 
@@ -268,6 +282,9 @@ export default function Dashboard() {
                   <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider w-28">
                     Média
                   </th>
+                  <th className="px-6 py-4 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider w-28 hidden md:table-cell">
+                    Tendência
+                  </th>
                   <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider w-24">
                     Hab.
                   </th>
@@ -289,7 +306,11 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {topSchools?.schools.map((school, index) => (
+                {topLoading
+                  ? Array.from({ length: 10 }).map((_, i) => (
+                      <TableRowSkeleton key={i} cols={12} />
+                    ))
+                  : topSchools?.schools.map((school, index) => (
                   <tr
                     key={school.codigo_inep}
                     className="group hover:bg-blue-50/30 transition-all duration-200"
@@ -329,6 +350,11 @@ export default function Dashboard() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <span className="text-lg font-bold text-slate-900">{formatTriScore(school.nota_media)}</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap hidden md:table-cell">
+                      <div className="flex justify-center">
+                        <Sparkline data={school.history ?? []} />
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <span className="text-sm font-medium text-slate-600">

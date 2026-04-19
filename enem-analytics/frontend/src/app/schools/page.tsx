@@ -5,7 +5,9 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { formatNumber, formatRanking, formatTriScore } from '@/lib/utils';
 import Link from 'next/link';
-import { Search, ChevronLeft, ChevronRight, Bell, School as SchoolIcon } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Bell, School as SchoolIcon, SearchX } from 'lucide-react';
+import { TableRowSkeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
 
 const UF_OPTIONS = [
   '', 'AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS',
@@ -154,14 +156,23 @@ export default function SchoolsPage() {
 
       {/* Results */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          </div>
-        ) : schools?.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            Nenhuma escola encontrada
-          </div>
+        {!isLoading && schools?.length === 0 ? (
+          <EmptyState
+            icon={SearchX}
+            title="Nenhuma escola encontrada"
+            description="Ajuste os filtros ou limpe a busca para ver todas as escolas."
+            action={{
+              label: "Limpar filtros",
+              onClick: () => {
+                setSearch('');
+                setUf('');
+                setTipoEscola('');
+                setLocalizacao('');
+                setPorte('');
+                setPage(1);
+              },
+            }}
+          />
         ) : (
           <>
             <div className="overflow-x-auto">
@@ -192,7 +203,11 @@ export default function SchoolsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {schools?.map((school) => (
+                  {isLoading
+                    ? Array.from({ length: 10 }).map((_, i) => (
+                        <TableRowSkeleton key={i} cols={7} />
+                      ))
+                    : schools?.map((school) => (
                     <tr key={school.codigo_inep} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="text-gray-900 font-medium">

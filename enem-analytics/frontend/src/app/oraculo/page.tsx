@@ -17,9 +17,7 @@ import {
   Info,
   Filter,
   Database,
-  BarChart3,
   FileText,
-  AlertTriangle
 } from 'lucide-react';
 
 // Normaliza nomes de área do CSV para exibição
@@ -75,11 +73,6 @@ export default function OraculoPage() {
   });
 
   const predictionYear = data?.ano_predicao;
-  const historicalRangeLabel = predictionYear ? `2009-${predictionYear - 1}` : '2009-atual';
-  const methodologyDescription =
-    data?.metodologia?.descricao ??
-    `Predições baseadas em análise estatística de frequência histórica de temas no ENEM (${historicalRangeLabel}).`;
-  const dataSourceLabel = data?.metodologia?.fonte_dados ?? 'CSV TRI oficial';
 
   const getProbabilityColor = (prob: number) => {
     if (prob >= 0.3) return 'text-green-600 bg-green-50';
@@ -138,39 +131,6 @@ export default function OraculoPage() {
       </div>
 
       <div className="p-6 space-y-6 max-w-7xl mx-auto">
-        {/* Metodologia Card */}
-        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl p-6 text-white shadow-xl">
-          <div className="flex items-start gap-4">
-            <Database className="h-6 w-6 flex-shrink-0 mt-1" />
-            <div>
-              <h2 className="font-semibold text-lg mb-2">Metodologia Científica</h2>
-              <p className="text-indigo-100 text-sm mb-3">
-                {methodologyDescription}
-              </p>
-              <div className="flex flex-wrap gap-3 text-xs">
-                <span className="px-2 py-1 bg-white/20 rounded flex items-center gap-1">
-                  <BarChart3 className="h-3 w-3" /> Frequências reais
-                </span>
-                <span className="px-2 py-1 bg-white/20 rounded flex items-center gap-1">
-                  <FileText className="h-3 w-3" /> 2.600 questões analisadas
-                </span>
-                <span className="px-2 py-1 bg-white/20 rounded flex items-center gap-1">
-                  <Database className="h-3 w-3" /> Fonte: {dataSourceLabel}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Limitações */}
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
-          <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-amber-800">
-            <strong>Limitações:</strong> Predições baseadas em padrões históricos não garantem temas futuros.
-            Temas emergentes podem aparecer sem histórico. Eventos atuais podem influenciar escolhas do INEP.
-          </div>
-        </div>
-
         {/* Filters */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
           <div className="flex items-center gap-2 mb-3">

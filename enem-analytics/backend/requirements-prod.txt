@@ -1,14 +1,14 @@
 # Production requirements - CPU-only for Fly.io
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
-pandas
-numpy
-scikit-learn
+pandas>=2.2,<3.1
+numpy>=1.26,<3.0
+scikit-learn>=1.4,<2.0
 pydantic[email]
 python-multipart
-xgboost
-joblib
-scipy
+xgboost>=2.0,<4.0
+joblib>=1.3,<2.0
+scipy>=1.11,<2.0
 requests==2.32.3
 
 # Authentication (legacy - being replaced by Supabase)

@@ -558,12 +558,17 @@ function NetworkTab({
     queryFn: () => api.getGlinerKnowledgeGraph(codigoInep, networkArea),
   });
 
+  // Pull nested fields out so React Compiler can preserve memoization; the
+  // inferred deps must match the source deps exactly.
+  const graphNodes = graphData?.nodes;
+  const graphEdges = graphData?.edges;
+
   // Filter and sort nodes by relevance (count), then limit
   const filteredNodes = useMemo(() => {
-    if (!graphData?.nodes) return [];
+    if (!graphNodes) return [];
 
     // Filter by entity type and area visibility
-    const filtered = graphData.nodes.filter(node => {
+    const filtered = graphNodes.filter(node => {
       const typeAllowed = entityFilters[node.type as keyof typeof entityFilters];
       const areaAllowed = !node.area || areaVisibility[node.area as keyof typeof areaVisibility];
       return typeAllowed && areaAllowed;
@@ -574,14 +579,14 @@ function NetworkTab({
 
     // Limit to maxNodes
     return sorted.slice(0, maxNodes);
-  }, [graphData?.nodes, entityFilters, areaVisibility, maxNodes]);
+  }, [graphNodes, entityFilters, areaVisibility, maxNodes]);
 
   // Filter edges to only include those with visible nodes
   const filteredEdges = useMemo(() => {
-    if (!graphData?.edges) return [];
+    if (!graphEdges) return [];
     const nodeIds = new Set(filteredNodes.map(n => n.id));
-    return graphData.edges.filter(edge => nodeIds.has(edge.source) && nodeIds.has(edge.target));
-  }, [graphData?.edges, filteredNodes]);
+    return graphEdges.filter(edge => nodeIds.has(edge.source) && nodeIds.has(edge.target));
+  }, [graphEdges, filteredNodes]);
 
   // Zoom to area function
   const zoomToArea = useCallback((area: string) => {

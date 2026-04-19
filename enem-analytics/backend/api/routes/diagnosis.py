@@ -70,8 +70,11 @@ async def get_skill_stats(
     skills_by_area = {'CN': [], 'CH': [], 'LC': [], 'MT': []}
 
     for skill_code, avg in engine.skill_averages.items():
-        area = skill_code.split('_')[0]
-        skill_num = int(skill_code.split('H')[1])
+        # Skill codes are formatted like "CH_H1" -> area=CH, skill_num=1.
+        area, _, tail = skill_code.partition("_H")
+        if not tail.isdigit():
+            continue
+        skill_num = int(tail)
 
         if area in skills_by_area:
             skills_by_area[area].append({
@@ -205,7 +208,7 @@ async def get_quick_wins(
 @router.get("/{codigo_inep}/area/{area}")
 async def get_area_diagnosis(
     codigo_inep: str,
-    area: str = PathParam(..., pattern="^(CN|CH|LC|MT|redacao)$"),
+    area: str = PathParam(..., pattern="^(?i)(CN|CH|LC|MT|redacao)$"),
     _: UserProfile = Depends(get_authorized_school_user),
 ):
     """
@@ -213,11 +216,14 @@ async def get_area_diagnosis(
 
     Args:
         codigo_inep: School INEP code
-        area: Area to analyze (CN, CH, LC, MT, redacao)
+        area: Area to analyze (CN, CH, LC, MT, redacao) — case-insensitive
 
     Returns:
         Detailed analysis for the specified area
     """
+    # Normalize to canonical casing used by the diagnosis engine
+    area_normalized = area.lower() if area.lower() == "redacao" else area.upper()
+
     engine = get_diagnosis_engine()
 
     # Get full diagnosis
@@ -228,7 +234,7 @@ async def get_area_diagnosis(
 
     # Find this area
     area_info = next(
-        (a for a in diagnosis['area_analysis'] if a['area'] == area),
+        (a for a in diagnosis['area_analysis'] if a['area'] == area_normalized),
         None
     )
 
@@ -238,12 +244,12 @@ async def get_area_diagnosis(
     # Get skill gaps for this area
     area_skill_gaps = [
         s for s in diagnosis.get('skill_gaps', [])
-        if s['area'] == area
+        if s['area'] == area_normalized
     ]
 
     return {
         'codigo_inep': codigo_inep,
-        'area': area,
+        'area': area_normalized,
         'area_name': area_info['area_name'],
         'analysis': area_info,
         'skill_gaps': area_skill_gaps,

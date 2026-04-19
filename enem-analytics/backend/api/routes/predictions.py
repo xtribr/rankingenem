@@ -148,6 +148,8 @@ async def get_top_potential_improvers(
     if tipo_escola:
         latest_year_df = latest_year_df[latest_year_df['tipo_escola'] == tipo_escola]
 
+    import math
+
     # Sample schools for batch prediction (limit computation)
     sample_schools = latest_year_df['codigo_inep'].head(500).tolist()
 
@@ -157,16 +159,28 @@ async def get_top_potential_improvers(
             pred = model.predict(codigo_inep, 'nota_media')
             actual = latest_year_df[latest_year_df['codigo_inep'] == codigo_inep]['nota_media'].values[0]
 
-            if actual and pred['prediction']:
-                improvement = pred['prediction'] - actual
-                results.append({
-                    'codigo_inep': codigo_inep,
-                    'nome_escola': latest_year_df[latest_year_df['codigo_inep'] == codigo_inep]['nome_escola'].values[0],
-                    'nota_atual': float(actual),
-                    'nota_prevista': pred['prediction'],
-                    'melhoria_esperada': improvement,
-                    'ano_atual': latest_data_year,
-                })
+            prediction = pred.get('prediction')
+            if actual is None or prediction is None:
+                continue
+            try:
+                actual_f = float(actual)
+                prediction_f = float(prediction)
+            except (TypeError, ValueError):
+                continue
+            if math.isnan(actual_f) or math.isnan(prediction_f) or math.isinf(actual_f) or math.isinf(prediction_f):
+                continue
+            improvement = prediction_f - actual_f
+            if math.isnan(improvement) or math.isinf(improvement):
+                continue
+
+            results.append({
+                'codigo_inep': codigo_inep,
+                'nome_escola': latest_year_df[latest_year_df['codigo_inep'] == codigo_inep]['nome_escola'].values[0],
+                'nota_atual': actual_f,
+                'nota_prevista': prediction_f,
+                'melhoria_esperada': improvement,
+                'ano_atual': latest_data_year,
+            })
         except (ValueError, IndexError, KeyError):
             continue
         except Exception as e:

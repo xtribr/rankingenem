@@ -150,10 +150,20 @@ class ENEMPredictionModel:
 
     def _legacy_metadata(self, target: str, artifact: Dict[str, Any]) -> Dict[str, Any]:
         metrics = artifact.get("metrics", {}) or {}
+        # Use the joblib file mtime as a best-effort stand-in for `trained_at`.
+        artifact_path = self._artifact_path(target)
+        trained_at: Optional[str] = None
+        try:
+            if artifact_path.exists():
+                trained_at = datetime.fromtimestamp(
+                    artifact_path.stat().st_mtime, tz=timezone.utc
+                ).replace(microsecond=0).isoformat()
+        except OSError:
+            trained_at = None
         return {
             "algorithm": artifact.get("model").__class__.__name__ if artifact.get("model") else "unknown",
             "model_version": "legacy-v0",
-            "trained_at": None,
+            "trained_at": trained_at,
             "training_pairs": [],
             "evaluation_strategy": "random-split",
             "public_metrics": {

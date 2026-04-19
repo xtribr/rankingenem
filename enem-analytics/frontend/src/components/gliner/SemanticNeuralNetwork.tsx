@@ -147,6 +147,26 @@ export function SemanticNeuralNetwork({ nodes = SAMPLE_NODES, edges }: Props) {
   useEffect(() => {
     if (!svgRef.current || dimensions.width === 0) return;
 
+    // Custom force to cluster nodes by area. Declared inside the effect so the
+    // React Compiler does not see it as a TDZ access across the component body.
+    const forceCluster = (
+      clusterNodes: any[],
+      clusterCenterX: number,
+      clusterCenterY: number
+    ) => {
+      const strength = 0.15;
+      return (alpha: number) => {
+        clusterNodes.forEach(node => {
+          const areaConfig = AREA_CONFIG[node.area as keyof typeof AREA_CONFIG];
+          const targetX = clusterCenterX + Math.cos(areaConfig.angle) * 180;
+          const targetY = clusterCenterY + Math.sin(areaConfig.angle) * 180;
+
+          node.vx += (targetX - node.x) * strength * alpha;
+          node.vy += (targetY - node.y) * strength * alpha;
+        });
+      };
+    };
+
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
 
@@ -537,22 +557,6 @@ export function SemanticNeuralNetwork({ nodes = SAMPLE_NODES, edges }: Props) {
       tooltip.remove();
     };
   }, [nodes, computedEdges, dimensions, isAnimating]);
-
-  // Custom force to cluster nodes by area
-  function forceCluster(nodes: any[], centerX: number, centerY: number) {
-    const strength = 0.15;
-    
-    return function(alpha: number) {
-      nodes.forEach(node => {
-        const areaConfig = AREA_CONFIG[node.area as keyof typeof AREA_CONFIG];
-        const targetX = centerX + Math.cos(areaConfig.angle) * 180;
-        const targetY = centerY + Math.sin(areaConfig.angle) * 180;
-        
-        node.vx += (targetX - node.x) * strength * alpha;
-        node.vy += (targetY - node.y) * strength * alpha;
-      });
-    };
-  }
 
   const handleZoomIn = () => {
     if (svgRef.current) {

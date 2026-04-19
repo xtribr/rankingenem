@@ -181,26 +181,57 @@ def upload_to_supabase(
                 record[key] = None
 
     uploaded = 0
-    errors = 0
+    failed_records = 0
+    failed_batches: list[dict] = []
+    total_batches = (len(records) + batch_size - 1) // batch_size
 
     for i in range(0, len(records), batch_size):
         batch = records[i:i + batch_size]
+        batch_num = i // batch_size + 1
 
         try:
-            result = supabase.table("enem_results").upsert(
+            supabase.table("enem_results").upsert(
                 batch,
                 on_conflict="codigo_inep,ano"
             ).execute()
 
             uploaded += len(batch)
             pct = (i + len(batch)) / len(records) * 100
-            print(f"   ✓ Batch {i // batch_size + 1}: {uploaded:,}/{len(records):,} ({pct:.1f}%)")
+            print(f"   ✓ Batch {batch_num}: {uploaded:,}/{len(records):,} ({pct:.1f}%)")
 
         except Exception as e:
-            errors += 1
-            print(f"   ✗ Batch {i // batch_size + 1} failed: {e}")
+            failed_records += len(batch)
+            failed_batches.append({
+                "batch": batch_num,
+                "start_index": i,
+                "size": len(batch),
+                "error": str(e),
+            })
+            print(f"   ✗ Batch {batch_num} failed ({len(batch)} records): {e}")
 
-    return {"uploaded": uploaded, "errors": errors}
+    result = {
+        "uploaded": uploaded,
+        "errors": len(failed_batches),
+        "failed_records": failed_records,
+        "failed_batches": failed_batches,
+    }
+
+    # Fail loudly when any batch failed or when too many records did not land.
+    if failed_batches:
+        failure_ratio = len(failed_batches) / max(total_batches, 1)
+        record_failure_ratio = failed_records / max(len(records), 1)
+        summary = (
+            f"{len(failed_batches)}/{total_batches} batches failed "
+            f"({failed_records:,} records, {record_failure_ratio:.1%} of total)"
+        )
+        if failure_ratio >= 0.10 or record_failure_ratio >= 0.10:
+            raise RuntimeError(
+                f"Upload aborted after too many failures: {summary}. "
+                "Fix the underlying error before rerunning."
+            )
+        print(f"   ⚠ Upload completed with failures: {summary}")
+
+    return result
 
 
 def refresh_views(dry_run: bool = False):

@@ -53,6 +53,11 @@ export interface SchoolDetail {
   melhor_ranking: number | null;
 }
 
+export interface TopSchoolHistoryPoint {
+  ano: number;
+  nota_media: number;
+}
+
 export interface TopSchool {
   ranking: number;
   codigo_inep: string;
@@ -71,6 +76,7 @@ export interface TopSchool {
   nota_redacao: number | null;
   desempenho_habilidades: number | null;
   competencia_redacao_media: number | null;
+  history?: TopSchoolHistoryPoint[];
 }
 
 export interface Stats {

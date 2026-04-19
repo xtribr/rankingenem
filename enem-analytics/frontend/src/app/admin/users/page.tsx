@@ -48,19 +48,34 @@ function UserModal({
   user: User | null;
   isEdit: boolean;
 }) {
-  const [formData, setFormData] = useState<UserFormData>({
-    codigo_inep: '',
-    nome_escola: '',
-    email: '',
-    password: '',
-    is_admin: false,
-  });
+  // Form data is initialized from props on mount. The parent forces a fresh
+  // mount via `key` whenever `user` or `isOpen` changes, so the state stays in
+  // sync without a setState-in-effect.
+  const [formData, setFormData] = useState<UserFormData>(() =>
+    isEdit && user
+      ? {
+          codigo_inep: user.codigo_inep,
+          nome_escola: user.nome_escola,
+          email: user.email || '',
+          password: '',
+          is_admin: user.is_admin,
+        }
+      : {
+          codigo_inep: '',
+          nome_escola: '',
+          email: '',
+          password: '',
+          is_admin: false,
+        }
+  );
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   // School search state
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(() =>
+    isEdit && user ? user.nome_escola : ''
+  );
   const [searchResults, setSearchResults] = useState<SchoolSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -126,31 +141,6 @@ function UserModal({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  useEffect(() => {
-    if (user && isEdit) {
-      setFormData({
-        codigo_inep: user.codigo_inep,
-        nome_escola: user.nome_escola,
-        email: user.email || '',
-        password: '',
-        is_admin: user.is_admin,
-      });
-      setSearchQuery(user.nome_escola);
-    } else {
-      setFormData({
-        codigo_inep: '',
-        nome_escola: '',
-        email: '',
-        password: '',
-        is_admin: false,
-      });
-      setSearchQuery('');
-    }
-    setError('');
-    setSearchResults([]);
-    setShowDropdown(false);
-  }, [user, isEdit, isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -382,7 +372,7 @@ export default function UsersPage() {
 
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     setLoadError(null);
     try {
       const data = await api.listUsers();
@@ -394,12 +384,26 @@ export default function UsersPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  const loadUsersRef = useRef(loadUsers);
+  loadUsersRef.current = loadUsers;
 
   useEffect(() => {
-    if (isAdmin) {
-      loadUsers();
-    }
+    if (!isAdmin) return;
+
+    // Kick the fetch in a microtask so the effect body itself does not run any
+    // synchronous setState — avoids react-hooks/set-state-in-effect while keeping
+    // behavior identical (the fetch still starts immediately after mount).
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        void loadUsersRef.current();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [isAdmin]);
 
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -608,8 +612,10 @@ export default function UsersPage() {
         </div>
       </div>
 
-      {/* Modal */}
+      {/* Modal — key forces a fresh mount whenever the target user changes,
+          so the form state is re-initialized from props without a useEffect. */}
       <UserModal
+        key={`${editingUser?.id ?? 'new'}:${isModalOpen}`}
         isOpen={isModalOpen}
         onClose={() => {
           setIsModalOpen(false);

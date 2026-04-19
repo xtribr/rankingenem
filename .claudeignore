@@ -1,0 +1,24 @@
+# Heavy ML models (~206 MB) — not needed for code/test sessions
+enem-analytics/backend/models/
+
+# Backend data fixtures (~51 MB)
+enem-analytics/backend/data/
+
+# Root-level large datasets
+enem_2018_2024_completo.csv
+enem_2024_completo.csv
+enem_2024.db
+data/
+rankings_enem_2024_raw.json
+
+# Build artifacts
+enem-analytics/frontend/.next/
+enem-analytics/frontend/node_modules/
+enem-analytics/frontend/test-results/
+**/__pycache__/
+**/*.pyc
+.venv/
+venv/
+
+# Misc large extras
+gliner2/

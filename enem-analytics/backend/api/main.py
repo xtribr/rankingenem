@@ -58,7 +58,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_origin_regex=r"https://(frontend-.*\.vercel\.app|xtri-provas\.vercel\.app)",
+    allow_origin_regex=r"https://(frontend-[a-z0-9-]+\.vercel\.app|xtri-provas\.vercel\.app)",
 )
 
 # Include routers

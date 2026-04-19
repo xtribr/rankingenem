@@ -98,7 +98,21 @@ def get_latest_year() -> int:
     """Get the most recent year in the data"""
     conn = get_connection()
     result = conn.execute("SELECT MAX(ano) FROM schools").fetchone()
-    return result[0] if result else 2024
+    if result and result[0] is not None:
+        return int(result[0])
+
+    # Fallback: resolve from the newest CSV file in the backend data directory
+    from pathlib import Path
+
+    from data.year_resolver import find_latest_enem_results_file, get_file_year
+
+    data_dir = Path(__file__).resolve().parent
+    latest_file = find_latest_enem_results_file(data_dir)
+    file_year = get_file_year(latest_file) if latest_file else None
+    if file_year is not None:
+        return file_year
+
+    raise RuntimeError("DuckDB schools table is empty and no yearly CSV found")
 
 
 def list_schools(
