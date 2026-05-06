@@ -165,6 +165,8 @@ class ENEMPredictionModel:
             "model_version": "legacy-v0",
             "trained_at": trained_at,
             "training_pairs": [],
+            "latest_data_year": None,
+            "prediction_target_year": None,
             "evaluation_strategy": "random-split",
             "public_metrics": {
                 "rmse": metrics.get("test_rmse"),
@@ -202,6 +204,8 @@ class ENEMPredictionModel:
             "bias": float(bias) if bias is not None else None,
             "trained_at": metadata.get("trained_at"),
             "training_pairs": metadata.get("training_pairs", []),
+            "latest_data_year": metadata.get("latest_data_year"),
+            "prediction_target_year": metadata.get("prediction_target_year"),
             "model_version": metadata.get("model_version", MODEL_VERSION),
             "evaluation_strategy": metadata.get("evaluation_strategy", "random-split"),
             "promotion_gates": metadata.get("promotion_gates", {}),
@@ -223,6 +227,32 @@ class ENEMPredictionModel:
         info = self._get_target_model_info(target)
         rmse = info.get("rmse")
         return float(rmse) if rmse is not None else 30.0
+
+    def _ensure_model_promoted_for_current_data(self, target: str, preprocessor: ENEMPreprocessor) -> None:
+        """Bloqueia predição antiga quando a base real avanca de ciclo."""
+        latest_data_year = int(preprocessor.df["ano"].max())
+        info = self._get_target_model_info(target)
+        artifact_year = info.get("latest_data_year")
+
+        # Artefatos legados atuais nao guardavam ano de treino. Eles seguem
+        # aceitos somente enquanto a base mais recente ainda for 2024.
+        if artifact_year is None and latest_data_year <= 2024:
+            return
+
+        if artifact_year != latest_data_year:
+            raise ValueError(
+                "Modelo preditivo aguardando retreino com a base real mais recente "
+                f"({latest_data_year})."
+            )
+
+        gates = info.get("promotion_gates") or {}
+        required = [
+            gates.get("pass_top10_signed_error_gate"),
+            gates.get("pass_top20_negative_share_gate"),
+            gates.get("pass_rmse_gate"),
+        ]
+        if gates and not all(required):
+            raise ValueError("Modelo preditivo aguardando aprovacao dos gates de qualidade.")
 
     def _compute_promotion_gates(
         self,
@@ -444,6 +474,8 @@ class ENEMPredictionModel:
                     "test_rmse": metrics.get("test_rmse"),
                     "test_r2": metrics.get("test_r2"),
                 },
+                "latest_data_year": metadata.get("latest_data_year"),
+                "prediction_target_year": metadata.get("prediction_target_year"),
                 "public_metrics": metrics.get("public_metrics", {}),
                 "backtest": metadata.get("backtest", {}),
                 "current_cycle_audit": metadata.get("current_cycle_audit", {}),
@@ -507,6 +539,8 @@ class ENEMPredictionModel:
             "algorithm": model.__class__.__name__,
             "model_version": MODEL_VERSION,
             "trained_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+            "latest_data_year": int(preprocessor.df["ano"].max()),
+            "prediction_target_year": int(preprocessor.df["ano"].max()) + 1,
             "training_pairs": [f"<={year - 1}->{year}" for year in sorted(dataset["_target_year"].unique())],
             "evaluation_strategy": "rolling-origin-backtest",
             "public_metrics": public_metrics,
@@ -581,6 +615,7 @@ class ENEMPredictionModel:
             raise ValueError(f"Model for {target} not available")
 
         preprocessor = self._ensure_preprocessor()
+        self._ensure_model_promoted_for_current_data(target, preprocessor)
         features = preprocessor.prepare_features_for_school(codigo_inep)
         if features is None:
             raise ValueError(f"School {codigo_inep} not found")

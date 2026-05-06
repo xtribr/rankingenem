@@ -1,0 +1,5 @@
+# Mantem dados reais fora do Git.
+*
+!.gitignore
+!.gitkeep
+!README.md
