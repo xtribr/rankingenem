@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import sys
+import uuid
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -34,6 +35,14 @@ if str(BACKEND_ROOT) not in sys.path:
 
 SCORE_COLUMNS = ["media_cn", "media_ch", "media_lc", "media_mt", "media_redacao"]
 OBJECTIVE_SCORE_COLUMNS = ["media_cn", "media_ch", "media_lc", "media_mt"]
+INTEGER_COLUMNS = [
+    "num_participantes",
+    "ranking_nacional",
+    "ranking_uf",
+    "ranking_municipio",
+    "porte",
+    "anos_participacao",
+]
 
 DB_COLUMNS = [
     "codigo_inep",
@@ -62,6 +71,8 @@ DB_COLUMNS = [
     "inep_nome",
     "anos_participacao",
 ]
+
+STAGING_COLUMNS = ["import_job_id", "row_number"] + DB_COLUMNS
 
 CONSOLIDATED_COLUMNS = [
     "ano",
@@ -96,6 +107,7 @@ OFFICIAL_MAPPING = {
     "NU_MEDIA_LC": "media_lc",
     "NU_MEDIA_MT": "media_mt",
     "NU_MEDIA_RED": "media_redacao",
+    "NU_MEDIA_REDACAO": "media_redacao",
     "NU_PARTICIPANTES": "num_participantes",
     "NU_TAXA_PARTICIPACAO": "taxa_participacao",
 }
@@ -118,11 +130,14 @@ XTRI_MAPPING = {
     "nota_redacao": "media_redacao",
     "media_redacao": "media_redacao",
     "nota_media": "media_geral",
+    "nota_media_5areas": "media_geral",
     "media_geral": "media_geral",
     "nota_tri_media": "nota_tri_media",
     "ranking_brasil": "ranking_nacional",
+    "ranking_ano": "ranking_nacional",
     "ranking_nacional": "ranking_nacional",
     "ranking_uf": "ranking_uf",
+    "ranking_municipio": "ranking_municipio",
     "qt_matriculas": "num_participantes",
     "num_participantes": "num_participantes",
     "taxa_participacao": "taxa_participacao",
@@ -155,6 +170,18 @@ class FormatDetection:
     name: str
     mapping: dict[str, str]
     mapped_columns: int
+
+
+def validate_year(year: int) -> None:
+    """Mantem o contrato do CHECK constraint de `enem_results` no dry-run."""
+    if int(year) < 2018 or int(year) > 2030:
+        raise ValueError("Ano fora do range permitido pelo schema: 2018 a 2030.")
+
+
+def validate_batch_size(batch_size: int) -> None:
+    """Evita loops invalidos ou apply sem lote real."""
+    if int(batch_size) < 1:
+        raise ValueError("--batch-size deve ser maior ou igual a 1.")
 
 
 def sha256_file(path: Path) -> str:
@@ -237,6 +264,22 @@ def _case_insensitive_mapping(columns: Iterable[str], mapping: dict[str, str]) -
     return resolved
 
 
+def coalesce_mapped_columns(df: pd.DataFrame, mapping: dict[str, str]) -> pd.DataFrame:
+    """Aplica o mapa de colunas sem criar labels duplicados no DataFrame."""
+    target_sources: dict[str, list[str]] = {}
+    for source, target in mapping.items():
+        target_sources.setdefault(target, []).append(source)
+
+    result = pd.DataFrame(index=df.index)
+    for target, sources in target_sources.items():
+        if len(sources) == 1:
+            result[target] = df[sources[0]]
+            continue
+        # Se a fonte vier com alias duplicado, preserva o primeiro valor real.
+        result[target] = df[sources].bfill(axis=1).iloc[:, 0]
+    return result
+
+
 def detect_input_format(df: pd.DataFrame) -> FormatDetection:
     """Detecta se a fonte e oficial INEP ou consolidada XTRI."""
     official = _case_insensitive_mapping(df.columns, OFFICIAL_MAPPING)
@@ -274,6 +317,18 @@ def parse_numeric(series: pd.Series) -> pd.Series:
     return pd.to_numeric(normalized, errors="coerce")
 
 
+def parse_integer(series: pd.Series) -> pd.Series:
+    """Converte inteiros aceitando separador de milhar em pt-BR."""
+    if pd.api.types.is_numeric_dtype(series):
+        return pd.to_numeric(series, errors="coerce").round().astype("Int64")
+
+    text = series.astype(str).str.strip()
+    text = text.str.replace(r"\.0$", "", regex=True)
+    text = text.str.replace(r"[^\d-]", "", regex=True)
+    text = text.replace({"": None, "nan": None, "None": None})
+    return pd.to_numeric(text, errors="coerce").round().astype("Int64")
+
+
 def normalize_codigo_inep(series: pd.Series) -> pd.Series:
     """Normaliza INEP como texto com zero a esquerda quando necessario."""
     text = series.astype(str).str.strip()
@@ -301,8 +356,9 @@ def normalize_dependencia(series: pd.Series) -> pd.Series:
 
 def transform_to_enem_results(df: pd.DataFrame, year: int) -> tuple[pd.DataFrame, FormatDetection]:
     """Transforma a fonte detectada para o schema de `enem_results`."""
+    validate_year(year)
     detection = detect_input_format(df)
-    result = df.rename(columns=detection.mapping)
+    result = coalesce_mapped_columns(df, detection.mapping)
     result = result[[column for column in DB_COLUMNS if column in result.columns]].copy()
     result["ano"] = int(year)
 
@@ -316,18 +372,16 @@ def transform_to_enem_results(df: pd.DataFrame, year: int) -> tuple[pd.DataFrame
     for column in SCORE_COLUMNS + [
         "media_geral",
         "nota_tri_media",
-        "num_participantes",
         "taxa_participacao",
-        "ranking_nacional",
-        "ranking_uf",
-        "ranking_municipio",
-        "porte",
         "desempenho_habilidades",
         "competencia_redacao_media",
-        "anos_participacao",
     ]:
         if column in result.columns:
             result[column] = parse_numeric(result[column])
+
+    for column in INTEGER_COLUMNS:
+        if column in result.columns:
+            result[column] = parse_integer(result[column])
 
     complete_score_mask = result[SCORE_COLUMNS].notna().all(axis=1) if set(SCORE_COLUMNS).issubset(result.columns) else False
     if "media_geral" not in result.columns:
@@ -388,7 +442,7 @@ def enrich_with_censo(df: pd.DataFrame, censo_file: Path) -> pd.DataFrame:
         mapped_name = result["codigo_inep"].map(censo["nome_escola_censo"])
         result["nome_escola"] = result["nome_escola"].fillna(mapped_name)
 
-    return result
+    return recalculate_rankings(result)
 
 
 def recalculate_rankings(df: pd.DataFrame) -> pd.DataFrame:
@@ -404,6 +458,17 @@ def recalculate_rankings(df: pd.DataFrame) -> pd.DataFrame:
     if "uf" in df.columns:
         df.loc[valid, "ranking_uf"] = (
             df.loc[valid].groupby("uf")["media_geral"].rank(method="min", ascending=False).astype("Int64")
+        )
+    df["ranking_municipio"] = pd.NA
+    if "municipio" in df.columns:
+        group_columns = ["municipio"]
+        if "uf" in df.columns:
+            group_columns = ["uf", "municipio"]
+        df.loc[valid, "ranking_municipio"] = (
+            df.loc[valid]
+            .groupby(group_columns)["media_geral"]
+            .rank(method="min", ascending=False)
+            .astype("Int64")
         )
     return df.sort_values(["ranking_nacional", "codigo_inep"], na_position="last").reset_index(drop=True)
 
@@ -431,6 +496,26 @@ def build_validation_report(
     duplicate_count = int(transformed.duplicated(subset=["codigo_inep", "ano"]).sum())
     if duplicate_count:
         errors.append(f"Duplicidades em codigo_inep+ano: {duplicate_count}")
+
+    row_count = len(transformed)
+    for column in SCORE_COLUMNS:
+        if column not in transformed.columns:
+            errors.append(f"Coluna de nota ausente apos transformacao: {column}")
+            continue
+        if transformed[column].isna().all():
+            errors.append(f"Coluna de nota sem valores reais: {column}")
+
+    if set(SCORE_COLUMNS).issubset(transformed.columns) and row_count:
+        complete_scores = transformed[SCORE_COLUMNS].notna().all(axis=1)
+        incomplete_count = int((~complete_scores).sum())
+        complete_ratio = float(complete_scores.mean())
+        if complete_ratio < 0.95:
+            errors.append(
+                "Menos de 95% das escolas tem as 5 notas completas "
+                f"({complete_ratio:.1%}, incompletas={incomplete_count})."
+            )
+        elif incomplete_count:
+            warnings.append(f"{incomplete_count} escolas sem as 5 notas completas; revisar antes do apply.")
 
     mapped_ratio = len(transformed) / max(len(raw_df), 1)
     if mapped_ratio < 0.95:
@@ -524,11 +609,22 @@ def write_report(report: dict[str, Any], report_dir: Path, year: int, dry_run: b
     return path
 
 
-def load_environment(target_env: str, confirm_production: Optional[str]) -> None:
-    """Carrega .env local e aplica travas para producao."""
+def load_environment(target_env: str, confirm_production: Optional[str], require_supabase: bool) -> None:
+    """Carrega .env local e aplica travas para operacoes que tocam o banco."""
     load_dotenv(BACKEND_ROOT / ".env", override=False)
     supabase_url = os.getenv("SUPABASE_URL")
     service_key = os.getenv("SUPABASE_SERVICE_KEY")
+
+    if not require_supabase:
+        if not supabase_url:
+            return
+        is_local_url = "127.0.0.1" in supabase_url or "localhost" in supabase_url
+        if target_env == "local" and not is_local_url:
+            raise RuntimeError(f"--env local exige Supabase local quando SUPABASE_URL esta definido: {supabase_url}")
+        if target_env == "production" and is_local_url:
+            raise RuntimeError("--env production nao pode apontar para Supabase local.")
+        return
+
     if not supabase_url or not service_key:
         raise RuntimeError("SUPABASE_URL e SUPABASE_SERVICE_KEY sao obrigatorios.")
 
@@ -562,14 +658,49 @@ def existing_year_count(year: int) -> int:
     return int(result.count or 0)
 
 
+def staging_year_count(client: Any, import_job_id: str, year: int) -> int:
+    """Conta linhas em staging para validar carga antes da promocao atomica."""
+    result = (
+        client.table("enem_results_import_staging")
+        .select("codigo_inep", count="exact")
+        .eq("import_job_id", import_job_id)
+        .eq("ano", int(year))
+        .limit(1)
+        .execute()
+    )
+    return int(result.count or 0)
+
+
+def cleanup_staging(client: Any, import_job_id: str) -> Optional[str]:
+    """Remove linhas de staging de um job sem tocar na tabela final."""
+    try:
+        client.table("enem_results_import_staging").delete().eq("import_job_id", import_job_id).execute()
+    except Exception as exc:  # noqa: BLE001 - limpeza nao pode esconder erro primario
+        return str(exc)
+    return None
+
+
 def dataframe_to_records(df: pd.DataFrame) -> list[dict[str, Any]]:
     """Converte DataFrame para JSON serializavel aceito pelo PostgREST."""
     cleaned = df.where(pd.notna(df), None)
     return json.loads(cleaned.to_json(orient="records", force_ascii=False))
 
 
+def prepare_staging_dataframe(df: pd.DataFrame, import_job_id: str) -> pd.DataFrame:
+    """Adiciona metadados de job para carga em tabela de staging."""
+    staged = df.copy()
+    staged.insert(0, "row_number", range(1, len(staged) + 1))
+    staged.insert(0, "import_job_id", import_job_id)
+    for column in STAGING_COLUMNS:
+        if column not in staged.columns:
+            staged[column] = pd.NA
+    return staged[STAGING_COLUMNS].copy()
+
+
 def apply_to_supabase(df: pd.DataFrame, year: int, allow_existing_year: bool, batch_size: int) -> dict[str, Any]:
-    """Executa upsert em lotes com verificacao final de contagem."""
+    """Carrega staging e promove para `enem_results` por RPC transacional."""
+    validate_year(year)
+    validate_batch_size(batch_size)
     current_count = existing_year_count(year)
     if current_count and not allow_existing_year:
         raise RuntimeError(
@@ -578,25 +709,89 @@ def apply_to_supabase(df: pd.DataFrame, year: int, allow_existing_year: bool, ba
         )
 
     client = get_supabase_client()
-    records = dataframe_to_records(df)
-    uploaded = 0
+    import_job_id = str(uuid.uuid4())
+    staged_df = prepare_staging_dataframe(df, import_job_id)
+    records = dataframe_to_records(staged_df)
+    staged = 0
     failed_batches: list[dict[str, Any]] = []
+    cleanup_error: Optional[str] = None
 
     for start in range(0, len(records), batch_size):
         batch = records[start : start + batch_size]
         try:
-            client.table("enem_results").upsert(batch, on_conflict="codigo_inep,ano").execute()
-            uploaded += len(batch)
+            client.table("enem_results_import_staging").insert(batch).execute()
+            staged += len(batch)
         except Exception as exc:  # noqa: BLE001 - erro vai para relatorio
             failed_batches.append({"start": start, "size": len(batch), "error": str(exc)})
 
+    if failed_batches:
+        cleanup_error = cleanup_staging(client, import_job_id)
+        final_count = existing_year_count(year)
+        return {
+            "import_job_id": import_job_id,
+            "staged": staged,
+            "uploaded": 0,
+            "failed_batches": failed_batches,
+            "cleanup_error": cleanup_error,
+            "final_year_count": final_count,
+            "expected_year_count": len(df),
+            "status": "blocked",
+        }
+
+    staged_count = staging_year_count(client, import_job_id, year)
+    if staged_count != len(df):
+        cleanup_error = cleanup_staging(client, import_job_id)
+        final_count = existing_year_count(year)
+        return {
+            "import_job_id": import_job_id,
+            "staged": staged,
+            "staging_count": staged_count,
+            "uploaded": 0,
+            "failed_batches": failed_batches,
+            "cleanup_error": cleanup_error,
+            "final_year_count": final_count,
+            "expected_year_count": len(df),
+            "status": "blocked",
+        }
+
+    promotion_result: Any = None
+    try:
+        promotion = client.rpc(
+            "promote_enem_year_import",
+            {
+                "p_import_job_id": import_job_id,
+                "p_year": int(year),
+                "p_expected_count": len(df),
+                "p_allow_existing_year": bool(allow_existing_year),
+            },
+        ).execute()
+        promotion_result = promotion.data
+    except Exception as exc:  # noqa: BLE001 - tabela final nao foi tocada antes da RPC
+        cleanup_error = cleanup_staging(client, import_job_id)
+        final_count = existing_year_count(year)
+        return {
+            "import_job_id": import_job_id,
+            "staged": staged,
+            "staging_count": staged_count,
+            "uploaded": 0,
+            "failed_batches": [{"start": 0, "size": len(df), "error": str(exc)}],
+            "cleanup_error": cleanup_error,
+            "final_year_count": final_count,
+            "expected_year_count": len(df),
+            "status": "blocked",
+        }
+
     final_count = existing_year_count(year)
     return {
-        "uploaded": uploaded,
+        "import_job_id": import_job_id,
+        "staged": staged,
+        "staging_count": staged_count,
+        "uploaded": len(df) if final_count == len(df) else 0,
         "failed_batches": failed_batches,
+        "promotion_result": promotion_result,
         "final_year_count": final_count,
-        "expected_year_count": len(records),
-        "status": "ok" if not failed_batches and final_count == len(records) else "blocked",
+        "expected_year_count": len(df),
+        "status": "ok" if not failed_batches and final_count == len(df) else "blocked",
     }
 
 
@@ -643,14 +838,15 @@ def write_consolidated_file(transformed: pd.DataFrame, year: int, output_path: O
     return destination
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Atualizacao segura de dados ENEM por ano.")
     parser.add_argument("--year", type=int, required=True, help="Ano dos dados, ex.: 2025")
     parser.add_argument("--input", type=Path, required=True, help="CSV/ZIP real de entrada")
     parser.add_argument("--zip-member", help="Nome do CSV dentro do ZIP quando houver multiplos")
     parser.add_argument("--env", choices=["local", "production"], default="local")
-    parser.add_argument("--dry-run", action="store_true", help="Valida sem gravar. E o padrao.")
-    parser.add_argument("--apply", action="store_true", help="Grava no Supabase apos validacao")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--dry-run", action="store_true", help="Valida sem gravar. E o padrao.")
+    mode.add_argument("--apply", action="store_true", help="Grava no Supabase apos validacao")
     parser.add_argument("--allow-existing-year", action="store_true", help="Permite upsert se o ano ja tiver linhas")
     parser.add_argument("--batch-size", type=int, default=500)
     parser.add_argument("--report-dir", type=Path, default=DEFAULT_REPORT_DIR)
@@ -658,13 +854,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--write-consolidated", action="store_true", help="Gera enem_2018_<ano>_completo.csv")
     parser.add_argument("--consolidated-output", type=Path)
     parser.add_argument("--confirm-production")
-    return parser.parse_args()
+    args = parser.parse_args(argv)
+    try:
+        validate_year(args.year)
+        validate_batch_size(args.batch_size)
+    except ValueError as exc:
+        parser.error(str(exc))
+    return args
 
 
-def main() -> int:
-    args = parse_args()
+def main(argv: Optional[list[str]] = None) -> int:
+    args = parse_args(argv)
     dry_run = not args.apply
-    load_environment(args.env, args.confirm_production)
+    load_environment(args.env, args.confirm_production, require_supabase=args.apply)
 
     loaded = load_csv_flexible(args.input, member=args.zip_member)
     transformed, detection = transform_to_enem_results(loaded.dataframe, args.year)
@@ -691,20 +893,26 @@ def main() -> int:
         return 2
 
     if args.apply:
-        apply_result = apply_to_supabase(
-            transformed,
-            year=args.year,
-            allow_existing_year=args.allow_existing_year,
-            batch_size=args.batch_size,
-        )
+        try:
+            apply_result = apply_to_supabase(
+                transformed,
+                year=args.year,
+                allow_existing_year=args.allow_existing_year,
+                batch_size=args.batch_size,
+            )
+        except Exception as exc:  # noqa: BLE001 - falha vira relatorio auditavel
+            apply_result = {"status": "blocked", "error": str(exc)}
         report["apply_result"] = apply_result
         if apply_result["status"] != "ok":
             report["status"] = "blocked"
             report["errors"].append("Falha no apply Supabase; veja apply_result.")
 
     if args.write_consolidated:
-        consolidated_path = write_consolidated_file(transformed, args.year, args.consolidated_output)
-        report["consolidated_output"] = str(consolidated_path)
+        if report["status"] == "ok":
+            consolidated_path = write_consolidated_file(transformed, args.year, args.consolidated_output)
+            report["consolidated_output"] = str(consolidated_path)
+        else:
+            report["warnings"].append("CSV consolidado nao gerado porque a validacao/apply foi bloqueado.")
 
     report_path = write_report(report, args.report_dir, args.year, dry_run=dry_run)
     print(f"Relatorio: {report_path}")

@@ -11,7 +11,14 @@ Regras:
 
 ```bash
 cd ../enem-analytics/backend
-python scripts/update_enem_year.py --year 2025 --input ../../microdados-2025/arquivo.csv --env local --dry-run
+python scripts/update_enem_year.py --year 2025 --input ../../microdados-2025/arquivo.csv --env local --dry-run --censo-file data/censo_escolas_2024.csv
 ```
 
-Para gravar no Supabase local, use `--apply` somente depois de revisar o relatorio.
+Antes de gravar, rode a migration `backend/scripts/migrations/005_enem_results_atomic_import.sql`.
+Ela cria a tabela de staging e a funcao transacional de promocao.
+
+Para gravar no Supabase local, use `--apply` somente depois de revisar o relatorio:
+
+```bash
+python scripts/update_enem_year.py --year 2025 --input ../../microdados-2025/arquivo.csv --env local --apply --censo-file data/censo_escolas_2024.csv
+```

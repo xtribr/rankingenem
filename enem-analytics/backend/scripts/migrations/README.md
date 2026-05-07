@@ -7,6 +7,7 @@ SQL migrations for the X-TRI Escolas Supabase database.
 | File | Description | Status |
 |------|-------------|--------|
 | `001_optimize_schema.sql` | RLS optimization, new tables, indexes | Ready |
+| `005_enem_results_atomic_import.sql` | Staging + promocao atomica para ENEM 2025 | Ready |
 
 ## How to Run
 
@@ -49,12 +50,15 @@ When INEP releases 2025 data (expected July 2025):
 # 1. Download from INEP portal
 # https://www.gov.br/inep/pt-br/acesso-a-informacao/dados-abertos/microdados
 
-# 2. Run import script
-cd enem-analytics/backend
-python scripts/import_enem_year.py --year 2025 --file /path/to/enem_2025.csv
+# 2. Run atomic import migration once
+backend/scripts/migrations/005_enem_results_atomic_import.sql
 
-# 3. Verify import
-python scripts/import_enem_year.py --year 2025 --file /path/to/data.csv --dry-run
+# 3. Run safe dry-run
+cd enem-analytics/backend
+python scripts/update_enem_year.py --year 2025 --input /path/to/enem_2025.csv --env local --dry-run --censo-file data/censo_escolas_2024.csv
+
+# 4. Apply only after reviewing the report
+python scripts/update_enem_year.py --year 2025 --input /path/to/enem_2025.csv --env local --apply --censo-file data/censo_escolas_2024.csv
 ```
 
 ## RLS Policies Summary

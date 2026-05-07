@@ -1,16 +1,26 @@
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
 from scripts.update_enem_year import (
     SCORE_COLUMNS,
     build_validation_report,
+    coalesce_mapped_columns,
     enrich_with_censo,
     load_csv_flexible,
+    load_environment,
+    parse_args,
+    parse_integer,
+    prepare_staging_dataframe,
+    main,
     to_consolidated_schema,
     transform_to_enem_results,
+    validate_batch_size,
+    validate_year,
 )
 
 
@@ -100,6 +110,29 @@ class UpdateEnemYearTest(unittest.TestCase):
             check_names=False,
         )
 
+    def test_coalesces_duplicate_source_aliases_without_duplicate_columns(self):
+        raw = real_2024_sample(3)
+        # Teste estrutural: usa os mesmos valores reais em dois aliases de entrada.
+        source = pd.DataFrame(
+            {
+                "codigo_inep": raw["codigo_inep"],
+                "tipo_escola": raw["tipo_escola"],
+                "dependencia": pd.NA,
+            }
+        )
+
+        mapped = coalesce_mapped_columns(
+            source,
+            {
+                "codigo_inep": "codigo_inep",
+                "tipo_escola": "dependencia",
+                "dependencia": "dependencia",
+            },
+        )
+
+        self.assertEqual(list(mapped.columns), ["codigo_inep", "dependencia"])
+        self.assertEqual(mapped["dependencia"].tolist(), raw["tipo_escola"].tolist())
+
     def test_validation_blocks_duplicate_school_year(self):
         raw = real_2024_sample(1)
         duplicated = pd.concat([raw, raw], ignore_index=True)
@@ -128,6 +161,34 @@ class UpdateEnemYearTest(unittest.TestCase):
         self.assertEqual(report["status"], "blocked")
         self.assertTrue(any("Duplicidades" in error for error in report["errors"]))
 
+    def test_validation_blocks_when_score_columns_are_missing(self):
+        raw = real_2024_sample()
+        malformed = raw.drop(columns=["nota_cn", "nota_ch", "nota_lc", "nota_mt", "nota_redacao"])
+        transformed, detection = transform_to_enem_results(malformed, 2025)
+        loaded = type(
+            "Loaded",
+            (),
+            {
+                "source_member": None,
+                "sha256": "real-2024-derived",
+                "byte_size": 0,
+                "encoding": "memory",
+                "separator": "memory",
+            },
+        )()
+
+        report = build_validation_report(
+            input_path=DATA_FILE,
+            loaded=loaded,
+            detection=detection,
+            raw_df=malformed,
+            transformed=transformed,
+            year=2025,
+        )
+
+        self.assertEqual(report["status"], "blocked")
+        self.assertTrue(any("Coluna de nota sem valores reais" in error for error in report["errors"]))
+
     def test_censo_enrichment_fills_real_uf_for_consolidated_rows(self):
         raw = real_2024_sample()
         transformed, _ = transform_to_enem_results(raw, 2025)
@@ -135,6 +196,7 @@ class UpdateEnemYearTest(unittest.TestCase):
         enriched = enrich_with_censo(transformed, CENSO_FILE)
 
         self.assertEqual(int(enriched["uf"].notna().sum()), len(enriched))
+        self.assertEqual(int(enriched["ranking_uf"].notna().sum()), len(enriched))
 
     def test_flexible_loader_detects_comma_csv_from_real_rows(self):
         raw = real_2024_sample(3)
@@ -146,6 +208,24 @@ class UpdateEnemYearTest(unittest.TestCase):
 
         self.assertEqual(len(loaded.dataframe), 3)
         self.assertIn("codigo_inep", loaded.dataframe.columns)
+
+    def test_zip_loader_requires_member_when_multiple_csvs_exist(self):
+        raw = real_2024_sample(1)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            zip_path = Path(tmp_dir) / "microdados.zip"
+            first = raw.to_csv(index=False)
+            second = raw.head(0).to_csv(index=False)
+            with zipfile.ZipFile(zip_path, "w") as archive:
+                archive.writestr("primeiro.csv", first)
+                archive.writestr("segundo.csv", second)
+
+            with self.assertRaisesRegex(ValueError, "--zip-member"):
+                load_csv_flexible(zip_path)
+
+            loaded = load_csv_flexible(zip_path, member="primeiro.csv")
+
+        self.assertEqual(len(loaded.dataframe), 1)
+        self.assertEqual(loaded.source_member, "primeiro.csv")
 
     def test_consolidated_output_keeps_current_model_columns(self):
         raw = real_2024_sample()
@@ -160,6 +240,80 @@ class UpdateEnemYearTest(unittest.TestCase):
             transformed["media_geral"].reset_index(drop=True).round(2),
             check_names=False,
         )
+
+    def test_prepare_staging_dataframe_adds_job_metadata_without_losing_rows(self):
+        raw = real_2024_sample(4)
+        transformed, _ = transform_to_enem_results(raw, 2025)
+
+        staged = prepare_staging_dataframe(transformed, "00000000-0000-0000-0000-000000000001")
+
+        self.assertEqual(len(staged), len(transformed))
+        self.assertEqual(staged["row_number"].tolist(), [1, 2, 3, 4])
+        self.assertEqual(staged["import_job_id"].nunique(), 1)
+        self.assertIn("ranking_municipio", staged.columns)
+
+    def test_parse_integer_handles_ptbr_thousand_separator(self):
+        parsed = parse_integer(pd.Series(["1.234", "3.0", ""]))
+
+        self.assertEqual(parsed.iloc[0], 1234)
+        self.assertEqual(parsed.iloc[1], 3)
+        self.assertTrue(pd.isna(parsed.iloc[2]))
+
+    def test_cli_rejects_ambiguous_apply_and_dry_run(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            csv_path = Path(tmp_dir) / "amostra.csv"
+            real_2024_sample(1).to_csv(csv_path, index=False)
+
+            with self.assertRaises(SystemExit):
+                parse_args(["--year", "2025", "--input", str(csv_path), "--apply", "--dry-run"])
+
+    def test_validation_helpers_reject_invalid_year_and_batch(self):
+        with self.assertRaisesRegex(ValueError, "2018 a 2030"):
+            validate_year(2031)
+        with self.assertRaisesRegex(ValueError, "batch-size"):
+            validate_batch_size(0)
+
+    def test_cli_reports_invalid_year_without_traceback(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            csv_path = Path(tmp_dir) / "amostra.csv"
+            real_2024_sample(1).to_csv(csv_path, index=False)
+
+            with self.assertRaises(SystemExit):
+                parse_args(["--year", "2031", "--input", str(csv_path), "--dry-run"])
+
+    def test_dry_run_environment_does_not_require_supabase_credentials(self):
+        with patch("scripts.update_enem_year.load_dotenv", return_value=True):
+            with patch.dict("os.environ", {}, clear=True):
+                load_environment("local", None, require_supabase=False)
+
+    def test_apply_exception_is_written_as_blocked_report(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            csv_path = Path(tmp_dir) / "amostra_real_2024.csv"
+            report_dir = Path(tmp_dir) / "reports"
+            real_2024_sample(3).to_csv(csv_path, index=False)
+
+            with patch("scripts.update_enem_year.load_environment", return_value=None):
+                with patch("scripts.update_enem_year.apply_to_supabase", side_effect=RuntimeError("ano existente")):
+                    exit_code = main(
+                        [
+                            "--year",
+                            "2025",
+                            "--input",
+                            str(csv_path),
+                            "--apply",
+                            "--report-dir",
+                            str(report_dir),
+                            "--censo-file",
+                            str(CENSO_FILE),
+                        ]
+                    )
+
+            reports = list(report_dir.glob("*.json"))
+            report_text = reports[0].read_text(encoding="utf-8") if reports else ""
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(len(reports), 1)
+        self.assertIn("ano existente", report_text)
 
 
 if __name__ == "__main__":
