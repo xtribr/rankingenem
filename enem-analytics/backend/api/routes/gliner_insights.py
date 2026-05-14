@@ -9,8 +9,7 @@ Provides rich educational analytics using GLiNER-extracted entities:
 - Knowledge graph data
 """
 
-import os
-import sys
+import logging
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple, Set
 from collections import Counter
@@ -20,6 +19,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.auth.authorization import get_authorized_school_user
 from api.auth.supabase_dependencies import UserProfile, get_current_admin
+
+logger = logging.getLogger(__name__)
 
 
 def levenshtein_ratio(s1: str, s2: str) -> float:
@@ -92,16 +93,57 @@ router = APIRouter()
 # Cache the GLiNER data
 _gliner_df: Optional[pd.DataFrame] = None
 
+REQUIRED_GLINER_COLUMNS = {
+    "area_code",
+    "tri_score",
+    "habilidade",
+    "conceitos_cientificos",
+    "campos_semanticos",
+    "campos_lexicais",
+    "processos_fenomenos",
+    "contextos_historicos",
+    "habilidades_compostas",
+}
 
-def get_gliner_data() -> pd.DataFrame:
+
+def validate_gliner_dataframe(df: pd.DataFrame, source: Path) -> pd.DataFrame:
+    """Validate and normalize the derived GLiNER TRI artifact."""
+    missing = sorted(REQUIRED_GLINER_COLUMNS - set(df.columns))
+    if missing:
+        raise HTTPException(
+            status_code=500,
+            detail=f"GLiNER artifact missing required columns: {', '.join(missing)}"
+        )
+
+    normalized = df.copy()
+    normalized["tri_score"] = pd.to_numeric(normalized["tri_score"], errors="coerce")
+    invalid_scores = int(normalized["tri_score"].isna().sum())
+    if invalid_scores:
+        logger.warning(
+            "GLiNER artifact %s has %s row(s) with invalid tri_score; they will be ignored by range filters",
+            source,
+            invalid_scores,
+        )
+    return normalized
+
+
+def get_gliner_data(data_dir: Optional[Path] = None, *, use_cache: bool = True) -> pd.DataFrame:
     """Load GLiNER-enriched TRI content data."""
     global _gliner_df
-    if _gliner_df is None:
-        gliner_path = DADOS_DIR / "conteudos_tri_gliner.csv"
+    cache_enabled = use_cache and data_dir is None
+    if _gliner_df is None or not cache_enabled:
+        gliner_path = (data_dir or DADOS_DIR) / "conteudos_tri_gliner.csv"
         if not gliner_path.exists():
-            raise HTTPException(status_code=500, detail="GLiNER data not found")
+            raise HTTPException(
+                status_code=500,
+                detail=f"GLiNER artifact not found: {gliner_path.name}"
+            )
         # Use quoting=1 (QUOTE_ALL) to properly handle fields with commas
-        _gliner_df = pd.read_csv(gliner_path, quoting=1)
+        loaded = pd.read_csv(gliner_path, quoting=1)
+        normalized = validate_gliner_dataframe(loaded, gliner_path)
+        if cache_enabled:
+            _gliner_df = normalized
+        return normalized
     return _gliner_df
 
 
@@ -336,7 +378,7 @@ async def get_school_concept_analysis(
 @router.get("/school/{codigo_inep}/knowledge-graph")
 async def get_knowledge_graph(
     codigo_inep: str,
-    area: Optional[str] = Query(None, regex="^(CN|CH|LC|MT)$"),
+    area: Optional[str] = Query(None, pattern="^(CN|CH|LC|MT)$"),
     _: UserProfile = Depends(get_authorized_school_user),
 ) -> Dict[str, Any]:
     """
@@ -681,7 +723,7 @@ async def get_knowledge_graph(
 @router.get("/school/{codigo_inep}/skill-concepts")
 async def get_skill_concept_mapping(
     codigo_inep: str,
-    area: Optional[str] = Query(None, regex="^(CN|CH|LC|MT)$"),
+    area: Optional[str] = Query(None, pattern="^(CN|CH|LC|MT)$"),
     _: UserProfile = Depends(get_authorized_school_user),
 ) -> Dict[str, Any]:
     """
@@ -966,7 +1008,7 @@ async def get_study_focus(
 
 @router.get("/global/trending-concepts")
 async def get_trending_concepts(
-    area: Optional[str] = Query(None, regex="^(CN|CH|LC|MT)$"),
+    area: Optional[str] = Query(None, pattern="^(CN|CH|LC|MT)$"),
     limit: int = Query(30, ge=10, le=100),
     _: UserProfile = Depends(get_current_admin),
 ) -> Dict[str, Any]:

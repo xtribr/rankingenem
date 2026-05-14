@@ -39,6 +39,44 @@ import {
   Legend,
 } from 'recharts';
 
+interface AreaChartDatum {
+  area: string;
+  name: string;
+  score: number;
+  target: number;
+  fill: string;
+}
+
+interface TriRecommendation {
+  area: string;
+  area_name?: string;
+  predicted_score?: number;
+  range_info?: { label?: string };
+  key_themes?: string[];
+  sample_content?: {
+    habilidade?: string;
+    tri_score?: number;
+    descricao?: string;
+  }[];
+  stretch_goals?: {
+    habilidade?: string;
+    tri_score?: number;
+  }[];
+}
+
+interface RoadmapPhase {
+  phase?: number | string;
+  name?: string;
+  description?: string;
+  expected_gain?: number;
+}
+
+interface QuickWin {
+  area: string;
+  area_name?: string;
+  expected_gain?: number;
+}
+
 export default function RoadmapPage() {
   const params = useParams();
   const codigo_inep = params.codigo_inep as string;
@@ -104,7 +142,7 @@ export default function RoadmapPage() {
   };
 
   // Prepare chart data
-  const areaChartData = triRecommendations?.recommendations?.map((rec: any) => ({
+  const areaChartData: AreaChartDatum[] = triRecommendations?.recommendations?.map((rec: TriRecommendation) => ({
     area: rec.area,
     name: areaNames[rec.area] || rec.area,
     score: rec.predicted_score || 0,
@@ -243,9 +281,9 @@ export default function RoadmapPage() {
         </div>
 
         {/* Charts Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <div className="grid min-w-0 grid-cols-1 gap-6 mb-6 lg:grid-cols-3">
           {/* Bar Chart - Scores by Area */}
-          <div className="lg:col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+          <div className="min-w-0 rounded-2xl border border-slate-100 bg-white p-6 shadow-sm lg:col-span-2">
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">Desempenho por Área</h3>
@@ -258,8 +296,8 @@ export default function RoadmapPage() {
                 <option>Comparar anos</option>
               </select>
             </div>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+            <div className="h-72 min-h-[18rem] w-full min-w-0">
+              <ResponsiveContainer width="100%" height={288} minWidth={0}>
                 <BarChart data={areaChartData} barGap={8}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                   <XAxis dataKey="name" tick={{ fontSize: 12 }} stroke="#64748B" />
@@ -279,7 +317,7 @@ export default function RoadmapPage() {
                     formatter={(value) => [`${formatTriScore(value as number)} pts`, 'Nota']}
                   />
                   <Bar dataKey="score" radius={[8, 8, 0, 0]} maxBarSize={60}>
-                    {areaChartData.map((entry: any, index: number) => (
+                    {areaChartData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.fill} />
                     ))}
                   </Bar>
@@ -289,13 +327,13 @@ export default function RoadmapPage() {
           </div>
 
           {/* Radial Progress Chart */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+          <div className="min-w-0 rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-slate-900">Progresso Geral</h3>
               <p className="text-sm text-slate-500">Meta: {formatTriScore(targetScore)} pontos</p>
             </div>
-            <div className="h-56 flex items-center justify-center">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+            <div className="relative flex h-56 min-h-[14rem] w-full min-w-0 items-center justify-center">
+              <ResponsiveContainer width="100%" height={224} minWidth={0}>
                 <RadialBarChart
                   cx="50%"
                   cy="50%"
@@ -320,7 +358,7 @@ export default function RoadmapPage() {
             </div>
             {/* Area breakdown */}
             <div className="space-y-2 mt-4">
-              {areaChartData.slice(0, 4).map((area: any) => (
+              {areaChartData.slice(0, 4).map((area) => (
                 <div key={area.area} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div
@@ -355,7 +393,7 @@ export default function RoadmapPage() {
               </div>
 
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {roadmap?.phases?.map((phase: any, idx: number) => (
+                {roadmap?.phases?.map((phase: RoadmapPhase, idx: number) => (
                   <div
                     key={idx}
                     className={`p-3 rounded-xl border transition-all ${
@@ -393,7 +431,7 @@ export default function RoadmapPage() {
                 </div>
 
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 flex-1">
-                  {triRecommendations.recommendations?.map((rec: any) => (
+                  {triRecommendations.recommendations?.map((rec: TriRecommendation) => (
                     <div key={rec.area} className="border-l-4 bg-slate-50 rounded-r-xl p-3 flex flex-col" style={{ borderLeftColor: areaColors[rec.area] }}>
                       <div className="flex items-center gap-2 mb-2">
                         <div
@@ -415,9 +453,9 @@ export default function RoadmapPage() {
                       </span>
 
                       {/* BrainX Themes */}
-                      {rec.key_themes?.length > 0 && (
+                      {(rec.key_themes?.length ?? 0) > 0 && (
                         <div className="mt-3 flex flex-wrap gap-1">
-                          {rec.key_themes.slice(0, 3).map((theme: string, idx: number) => (
+                          {(rec.key_themes ?? []).slice(0, 3).map((theme, idx) => (
                             <span key={idx} className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[10px] rounded">
                               {theme}
                             </span>
@@ -427,7 +465,7 @@ export default function RoadmapPage() {
 
                       {/* Sample Content */}
                       <div className="mt-3 space-y-1.5 flex-1">
-                        {rec.sample_content?.slice(0, 10).map((content: any, idx: number) => (
+                        {rec.sample_content?.slice(0, 10).map((content, idx) => (
                           <div key={idx} className="text-xs p-2 bg-white rounded-lg border border-slate-100">
                             <div className="flex items-start justify-between gap-2">
                               <span className="text-blue-600 font-semibold">{content.habilidade}</span>
@@ -444,10 +482,10 @@ export default function RoadmapPage() {
 
                       {/* Stretch Goals - always at bottom */}
                       <div className="mt-auto pt-3 border-t border-slate-200">
-                        {rec.stretch_goals?.length > 0 ? (
+                        {(rec.stretch_goals?.length ?? 0) > 0 ? (
                           <>
                             <p className="text-[10px] text-slate-400 mb-1.5">Metas avançadas:</p>
-                            {rec.stretch_goals.slice(0, 2).map((goal: any, idx: number) => (
+                            {(rec.stretch_goals ?? []).slice(0, 2).map((goal, idx) => (
                               <div key={idx} className="text-[10px] text-slate-500">
                                 <span className="font-medium">{goal.habilidade}</span> - {goal.tri_score} pts
                               </div>
@@ -479,7 +517,7 @@ export default function RoadmapPage() {
               </div>
 
               <div className="space-y-3">
-                {mlRecommendations?.quick_wins?.slice(0, 4).map((win: any, idx: number) => (
+                {mlRecommendations?.quick_wins?.slice(0, 4).map((win: QuickWin, idx: number) => (
                   <div
                     key={idx}
                     className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"

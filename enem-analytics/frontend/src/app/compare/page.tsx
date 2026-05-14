@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { formatTriScore } from '@/lib/utils';
@@ -13,6 +13,7 @@ import {
   BarChart3,
   LineChart,
   Download,
+  Loader2,
   ChevronDown,
   Sparkles,
   Award,
@@ -27,11 +28,11 @@ import {
   CompetitiveAnalysis,
   RankingComparison,
   SimilarSchoolsSuggestions,
-  PDFExportModal,
   QuickWinsComparison,
   SuccessStoriesComparison,
   TRIAnalysisComparison,
 } from '@/components/compare';
+import { generateExecutiveReport, type GeneratedReportFile } from '@/components/compare/ExecutiveReportGenerator';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -88,23 +89,27 @@ export default function ComparePage() {
   const [school2, setSchool2] = useState<string | null>(null);
   const [school1Name, setSchool1Name] = useState('');
   const [school2Name, setSchool2Name] = useState('');
-  const [showPdfModal, setShowPdfModal] = useState(false);
+  const [isPdfExporting, setIsPdfExporting] = useState(false);
+  const [pdfExportSuccess, setPdfExportSuccess] = useState(false);
+  const [pdfDownload, setPdfDownload] = useState<GeneratedReportFile | null>(null);
 
   // Anonymous display labels for privacy in comparisons
   const displayLabel1 = 'Escola 1';
   const displayLabel2 = 'Escola 2';
+  const canSearch1 = search1.trim().length >= 2;
+  const canSearch2 = search2.trim().length >= 2;
 
   // Search queries
   const { data: results1, isLoading: searching1 } = useQuery({
     queryKey: ['search', search1],
     queryFn: () => api.searchSchools(search1, 10),
-    enabled: search1.length >= 1,
+    enabled: canSearch1,
   });
 
   const { data: results2, isLoading: searching2 } = useQuery({
     queryKey: ['search', search2],
     queryFn: () => api.searchSchools(search2, 10),
-    enabled: search2.length >= 1,
+    enabled: canSearch2,
   });
 
   // Comparison data
@@ -171,6 +176,73 @@ export default function ComparePage() {
     setSearch2(nome);
   };
 
+  useEffect(() => {
+    return () => {
+      if (pdfDownload?.url) {
+        URL.revokeObjectURL(pdfDownload.url);
+      }
+    };
+  }, [pdfDownload]);
+
+  const handleExportPdf = async () => {
+    if (!school1 || !school2) {
+      alert('Selecione duas escolas antes de exportar o relatório.');
+      return;
+    }
+
+    if (loadingDiagnosis) {
+      alert('O diagnóstico comparativo ainda está carregando. Aguarde alguns segundos e tente novamente.');
+      return;
+    }
+
+    if (!diagnosisComparison) {
+      alert('Não foi possível carregar os dados do diagnóstico comparativo. Recarregue a comparação antes de exportar.');
+      return;
+    }
+
+    setIsPdfExporting(true);
+    setPdfExportSuccess(false);
+
+    try {
+      if (pdfDownload?.url) {
+        URL.revokeObjectURL(pdfDownload.url);
+      }
+
+      const generatedFile = generateExecutiveReport({
+        school1: {
+          codigo_inep: school1,
+          nome_escola: displayLabel1,
+          nota_media: getLatestScore(history1),
+          ranking: getLatestRanking(history1),
+          uf: comparison?.escola1?.uf || undefined,
+          tipo_escola: history1?.tipo_escola,
+        },
+        school2: {
+          codigo_inep: school2,
+          nome_escola: displayLabel2,
+          nota_media: getLatestScore(history2),
+          ranking: getLatestRanking(history2),
+          uf: comparison?.escola2?.uf || undefined,
+          tipo_escola: history2?.tipo_escola,
+        },
+        diagnosisComparison,
+        history1,
+        history2,
+        comparison,
+        generatedAt: new Date(),
+      });
+
+      setPdfDownload(generatedFile);
+      setPdfExportSuccess(true);
+      setTimeout(() => setPdfExportSuccess(false), 2000);
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      alert('Erro ao exportar PDF. Tente novamente.');
+    } finally {
+      setIsPdfExporting(false);
+    }
+  };
+
   // Prepare chart data with anonymous labels
   const evolutionData = comparison?.comparison?.map(year => ({
     ano: year.ano,
@@ -233,14 +305,17 @@ export default function ComparePage() {
                   setSearch1(e.target.value);
                   if (school1) setSchool1(null);
                 }}
-                className="w-full pl-10 pr-4 py-3 bg-gray-50 border-0 rounded-xl focus:ring-2 focus:bg-white outline-none transition-all"
+                className="w-full pl-10 pr-4 py-3 bg-gray-50 border-0 rounded-xl text-gray-900 placeholder:text-gray-400 caret-blue-600 focus:ring-2 focus:bg-white outline-none transition-all"
                 style={{ '--tw-ring-color': COLORS.blue } as React.CSSProperties}
               />
             </div>
-            {searching1 && search1.length >= 1 && !school1 && (
+            {search1.trim().length === 1 && !school1 && (
+              <div className="mt-2 p-3 text-center text-gray-500 text-sm">Digite pelo menos 2 caracteres para buscar.</div>
+            )}
+            {searching1 && canSearch1 && !school1 && (
               <div className="mt-2 p-3 text-center text-gray-500 text-sm">Buscando...</div>
             )}
-            {results1 && results1.length > 0 && search1.length >= 1 && !school1 && !searching1 && (
+            {results1 && results1.length > 0 && canSearch1 && !school1 && !searching1 && (
               <div className="mt-2 rounded-xl overflow-hidden max-h-64 overflow-y-auto border border-gray-100">
                 {results1.map((s) => (
                   <button
@@ -286,14 +361,17 @@ export default function ComparePage() {
                   setSearch2(e.target.value);
                   if (school2) setSchool2(null);
                 }}
-                className="w-full pl-10 pr-4 py-3 bg-gray-50 border-0 rounded-xl focus:ring-2 focus:bg-white outline-none transition-all"
+                className="w-full pl-10 pr-4 py-3 bg-gray-50 border-0 rounded-xl text-gray-900 placeholder:text-gray-400 caret-emerald-600 focus:ring-2 focus:bg-white outline-none transition-all"
                 style={{ '--tw-ring-color': COLORS.green } as React.CSSProperties}
               />
             </div>
-            {searching2 && search2.length >= 1 && !school2 && (
+            {search2.trim().length === 1 && !school2 && (
+              <div className="mt-2 p-3 text-center text-gray-500 text-sm">Digite pelo menos 2 caracteres para buscar.</div>
+            )}
+            {searching2 && canSearch2 && !school2 && (
               <div className="mt-2 p-3 text-center text-gray-500 text-sm">Buscando...</div>
             )}
-            {results2 && results2.length > 0 && search2.length >= 1 && !school2 && !searching2 && (
+            {results2 && results2.length > 0 && canSearch2 && !school2 && !searching2 && (
               <div className="mt-2 rounded-xl overflow-hidden max-h-64 overflow-y-auto border border-gray-100">
                 {results2.map((s) => (
                   <button
@@ -419,22 +497,63 @@ export default function ComparePage() {
             </div>
 
             {/* Export PDF Button */}
-            <div className="flex justify-end">
-              <button
-                onClick={() => setShowPdfModal(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-white transition-colors"
-                style={{ backgroundColor: COLORS.purple }}
-              >
-                <Download className="w-4 h-4" />
-                Exportar Relatório PDF
-              </button>
+            <div className="flex flex-col items-end gap-3">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleExportPdf}
+                  disabled={isPdfExporting}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{ backgroundColor: COLORS.purple }}
+                >
+                  {isPdfExporting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
+                  {isPdfExporting
+                    ? 'Gerando PDF...'
+                    : pdfExportSuccess
+                      ? 'PDF pronto'
+                      : 'Exportar Relatório PDF'}
+                </button>
+              </div>
+              {pdfDownload && (
+                <div className="w-full max-w-md rounded-xl border border-purple-100 bg-purple-50 p-3 text-sm shadow-sm">
+                  <p className="font-semibold text-purple-900">PDF gerado, mas o navegador pode bloquear o download automático.</p>
+                  <p className="mt-1 text-xs text-purple-700">
+                    Arquivo: {pdfDownload.filename} ({Math.max(1, Math.round(pdfDownload.size / 1024))} KB)
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <a
+                      href={pdfDownload.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center rounded-lg bg-white px-3 py-2 text-xs font-bold text-purple-700 ring-1 ring-purple-200 hover:bg-purple-100"
+                    >
+                      Visualizar PDF
+                    </a>
+                    <a
+                      href={pdfDownload.url}
+                      download={pdfDownload.filename}
+                      className="inline-flex items-center justify-center rounded-lg bg-purple-600 px-3 py-2 text-xs font-bold text-white hover:bg-purple-700"
+                    >
+                      Baixar novamente
+                    </a>
+                  </div>
+                </div>
+              )}
+              {!diagnosisComparison && (
+                <p className="text-xs text-gray-500">
+                  {loadingDiagnosis ? 'Aguardando diagnóstico para habilitar o relatório completo.' : 'Diagnóstico ainda não disponível para exportação.'}
+                </p>
+              )}
             </div>
 
             {/* Main Charts Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-3">
 
               {/* Evolution Chart - Takes 2 columns */}
-              <div className="lg:col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+              <div className="min-w-0 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm lg:col-span-2">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
                     <div className="px-4 py-2 bg-gray-100 rounded-lg flex items-center gap-2">
@@ -444,8 +563,8 @@ export default function ComparePage() {
                   </div>
                 </div>
 
-                <div className="h-72">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div className="h-72 min-h-[18rem] w-full min-w-0">
+                  <ResponsiveContainer width="100%" height={288} minWidth={0}>
                     <AreaChart data={evolutionData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                       <defs>
                         <linearGradient id="colorSchool1" x1="0" y1="0" x2="0" y2="1">
@@ -502,14 +621,14 @@ export default function ComparePage() {
               </div>
 
               {/* Radial Progress Charts */}
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+              <div className="min-w-0 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold text-gray-800">Aproveitamento</h3>
                 </div>
 
                 {/* School 1 Radial */}
-                <div className="relative h-36 mb-2">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div className="relative mb-2 h-36 min-h-[9rem] w-full min-w-0">
+                  <ResponsiveContainer width="100%" height={144} minWidth={0}>
                     <RadialBarChart
                       cx="50%"
                       cy="50%"
@@ -534,8 +653,8 @@ export default function ComparePage() {
                 </div>
 
                 {/* School 2 Radial */}
-                <div className="relative h-36">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div className="relative h-36 min-h-[9rem] w-full min-w-0">
+                  <ResponsiveContainer width="100%" height={144} minWidth={0}>
                     <RadialBarChart
                       cx="50%"
                       cy="50%"
@@ -563,10 +682,10 @@ export default function ComparePage() {
 
             {/* Second Row - Performance by Area & Bar Chart (requires diagnosis data) */}
             {diagnosisComparison && areaData.length > 0 && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-3">
 
               {/* Performance by Area - Progress Bars */}
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+              <div className="min-w-0 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="font-semibold text-gray-800">Desempenho por Área</h3>
                 </div>
@@ -604,7 +723,7 @@ export default function ComparePage() {
               </div>
 
               {/* Vertical Bar Chart - Score Comparison */}
-              <div className="lg:col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+              <div className="min-w-0 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm lg:col-span-2">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
                     <div className="px-4 py-2 bg-gray-100 rounded-lg flex items-center gap-2">
@@ -622,8 +741,8 @@ export default function ComparePage() {
                   </div>
                 </div>
 
-                <div className="h-72">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div className="h-72 min-h-[18rem] w-full min-w-0">
+                  <ResponsiveContainer width="100%" height={288} minWidth={0}>
                     <BarChart data={areaData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                       <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} />
@@ -782,30 +901,6 @@ export default function ComparePage() {
             </p>
           </div>
         )}
-
-        {/* PDF Export Modal */}
-        <PDFExportModal
-          isOpen={showPdfModal}
-          onClose={() => setShowPdfModal(false)}
-          school1Name={displayLabel1}
-          school2Name={displayLabel2}
-          school1Code={school1 || ''}
-          school2Code={school2 || ''}
-          school1Data={{
-            nota_media: getLatestScore(history1),
-            ranking: getLatestRanking(history1),
-            uf: comparison?.escola1?.uf || undefined,
-          }}
-          school2Data={{
-            nota_media: getLatestScore(history2),
-            ranking: getLatestRanking(history2),
-            uf: comparison?.escola2?.uf || undefined,
-          }}
-          diagnosisComparison={diagnosisComparison}
-          history1={history1}
-          history2={history2}
-          comparison={comparison}
-        />
       </div>
     </div>
   );

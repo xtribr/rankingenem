@@ -719,10 +719,16 @@ export const api = {
     );
   },
 
-  searchSchools: (q: string, limit = 20) =>
-    fetchAPI<{ codigo_inep: string; nome_escola: string; uf: string | null; ultimo_ano: number }[]>(
-      `/api/schools/search?q=${encodeURIComponent(q)}&limit=${limit}`
-    ),
+  searchSchools: (q: string, limit = 20) => {
+    const query = q.trim();
+    if (query.length < 2) {
+      return Promise.resolve([]);
+    }
+
+    return fetchAPI<{ codigo_inep: string; nome_escola: string; uf: string | null; ultimo_ano: number }[]>(
+      `/api/schools/search?q=${encodeURIComponent(query)}&limit=${limit}`
+    );
+  },
 
   getSchool: (codigo_inep: string) =>
     fetchAPI<SchoolDetail>(`/api/schools/${codigo_inep}`),

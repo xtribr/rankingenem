@@ -48,25 +48,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
-    let initialLoadDone = false;
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
+      (event, newSession) => {
         if (!mounted) return;
         setSession(newSession);
 
         if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          if (event === 'SIGNED_IN' && initialLoadDone && newSession) {
-            return;
-          }
-
-          await refreshUserFromSession(newSession);
-          if (newSession) {
-            initialLoadDone = true;
-          }
+          void refreshUserFromSession(newSession);
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
-          initialLoadDone = false;
         }
 
         if (mounted) {
@@ -84,13 +75,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     try {
-      await signIn(email, password);
+      const { session: signedInSession } = await signIn(email, password);
+      setSession(signedInSession);
+      await refreshUserFromSession(signedInSession);
     } catch (error) {
       setIsLoading(false);
       if (error instanceof Error && error.message === 'Invalid login credentials') {
         throw new Error('Email ou senha incorretos');
       }
       throw error instanceof Error ? error : new Error('Erro ao fazer login');
+    } finally {
+      setIsLoading(false);
     }
   };
 

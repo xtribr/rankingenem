@@ -56,8 +56,8 @@ export default function SchoolsPage() {
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 bg-blue-100 rounded-xl flex items-center justify-center">
-                <SchoolIcon className="h-5 w-5 text-blue-600" />
+              <div className="h-10 w-10 bg-[#E9F8FE] rounded-xl flex items-center justify-center">
+                <SchoolIcon className="h-5 w-5 text-[#28B7ED]" />
               </div>
               <div>
                 <h1 className="text-xl font-bold text-slate-900">Escolas</h1>
@@ -88,7 +88,7 @@ export default function SchoolsPage() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-slate-950 placeholder:text-slate-400 caret-[#28B7ED] focus:ring-2 focus:ring-[#28B7ED] focus:border-[#28B7ED] outline-none"
               />
             </div>
           </div>
@@ -99,11 +99,11 @@ export default function SchoolsPage() {
                 setUf(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+              className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#28B7ED] focus:border-[#28B7ED] outline-none bg-white ${uf ? 'text-slate-950' : 'text-slate-500'}`}
             >
-              <option value="">Todos os Estados</option>
+              <option value="" className="text-slate-500">Todos os Estados</option>
               {UF_OPTIONS.filter(Boolean).map((state) => (
-                <option key={state} value={state}>{state}</option>
+                <option key={state} value={state} className="text-slate-950">{state}</option>
               ))}
             </select>
           </div>
@@ -114,11 +114,11 @@ export default function SchoolsPage() {
                 setTipoEscola(e.target.value as 'Privada' | 'Pública' | '');
                 setPage(1);
               }}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+              className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#28B7ED] focus:border-[#28B7ED] outline-none bg-white ${tipoEscola ? 'text-slate-950' : 'text-slate-500'}`}
             >
-              <option value="">Todas as Redes</option>
-              <option value="Privada">Privada</option>
-              <option value="Pública">Pública</option>
+              <option value="" className="text-slate-500">Todas as Redes</option>
+              <option value="Privada" className="text-slate-950">Privada</option>
+              <option value="Pública" className="text-slate-950">Pública</option>
             </select>
           </div>
           <div className="w-full md:w-36">
@@ -128,11 +128,11 @@ export default function SchoolsPage() {
                 setLocalizacao(e.target.value as 'Urbana' | 'Rural' | '');
                 setPage(1);
               }}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+              className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#28B7ED] focus:border-[#28B7ED] outline-none bg-white ${localizacao ? 'text-slate-950' : 'text-slate-500'}`}
             >
-              <option value="">Todas Localizações</option>
-              <option value="Urbana">Urbana</option>
-              <option value="Rural">Rural</option>
+              <option value="" className="text-slate-500">Todas Localizações</option>
+              <option value="Urbana" className="text-slate-950">Urbana</option>
+              <option value="Rural" className="text-slate-950">Rural</option>
             </select>
           </div>
           <div className="w-full md:w-52">
@@ -142,10 +142,10 @@ export default function SchoolsPage() {
                 setPorte(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+              className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#28B7ED] focus:border-[#28B7ED] outline-none bg-white ${porte ? 'text-slate-950' : 'text-slate-500'}`}
             >
               {PORTE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
+                <option key={option.value} value={option.value} className={option.value ? 'text-slate-950' : 'text-slate-500'}>
                   {option.label}
                 </option>
               ))}

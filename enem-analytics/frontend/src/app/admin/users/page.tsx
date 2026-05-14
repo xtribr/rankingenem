@@ -386,9 +386,6 @@ export default function UsersPage() {
     }
   }, []);
 
-  const loadUsersRef = useRef(loadUsers);
-  loadUsersRef.current = loadUsers;
-
   useEffect(() => {
     if (!isAdmin) return;
 
@@ -398,13 +395,13 @@ export default function UsersPage() {
     let cancelled = false;
     queueMicrotask(() => {
       if (!cancelled) {
-        void loadUsersRef.current();
+        void loadUsers();
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [isAdmin]);
+  }, [isAdmin, loadUsers]);
 
   const [deleteError, setDeleteError] = useState<string | null>(null);
 

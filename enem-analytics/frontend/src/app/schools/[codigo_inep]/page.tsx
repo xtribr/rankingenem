@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
@@ -25,6 +25,20 @@ import {
   Cell,
   LabelList,
 } from 'recharts';
+
+const SCHOOL_DETAIL_TABS: TabDefinition[] = [
+  { id: 'overview', label: 'Visão Geral', icon: LayoutDashboard },
+  { id: 'historico', label: 'Histórico', icon: History },
+  { id: 'analise', label: 'Análise ML', icon: Brain },
+  { id: 'tri', label: 'TRI', icon: Microscope },
+  { id: 'insights', label: 'Conceitos', icon: Sparkles },
+];
+
+function getInitialTab(): string {
+  if (typeof window === 'undefined') return 'overview';
+  const initial = window.location.hash.replace('#', '');
+  return SCHOOL_DETAIL_TABS.some((tab) => tab.id === initial) ? initial : 'overview';
+}
 
 export default function SchoolDetailPage() {
   const params = useParams();
@@ -68,24 +82,7 @@ export default function SchoolDetailPage() {
   // Selected areas for chart - state for interactive selection (must be before early returns)
   const [selectedAreas, setSelectedAreas] = useState<string[]>(['Média']);
 
-  const TABS: TabDefinition[] = [
-    { id: 'overview', label: 'Visão Geral', icon: LayoutDashboard },
-    { id: 'historico', label: 'Histórico', icon: History },
-    { id: 'analise', label: 'Análise ML', icon: Brain },
-    { id: 'tri', label: 'TRI', icon: Microscope },
-    { id: 'insights', label: 'Conceitos', icon: Sparkles },
-  ];
-
-  const [activeTab, setActiveTab] = useState<string>('overview');
-
-  // Keep the tab in sync with the URL hash so deep links work.
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const initial = window.location.hash.replace('#', '');
-    if (TABS.some((t) => t.id === initial)) {
-      setActiveTab(initial);
-    }
-  }, []);
+  const [activeTab, setActiveTab] = useState<string>(getInitialTab);
 
   const handleTabChange = (id: string) => {
     setActiveTab(id);
@@ -315,7 +312,7 @@ export default function SchoolDetailPage() {
       </div>
 
       {/* Tab Navigation */}
-      <Tabs tabs={TABS} active={activeTab} onChange={handleTabChange} />
+      <Tabs tabs={SCHOOL_DETAIL_TABS} active={activeTab} onChange={handleTabChange} />
 
       <TabPanel id="overview" active={activeTab}>
       <div className="space-y-6">

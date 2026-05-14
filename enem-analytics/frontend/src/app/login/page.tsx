@@ -33,7 +33,6 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      router.push('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao fazer login');
     } finally {

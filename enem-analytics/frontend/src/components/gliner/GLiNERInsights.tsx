@@ -1567,9 +1567,9 @@ function NetworkTab({
                         {graphData.similarity_audit.details.duplicates.slice(0, 5).map((d, i) => (
                           <div key={i} className="flex items-center gap-2 text-slate-300">
                             <span className="text-red-400">•</span>
-                            <span>"{d.label1}"</span>
+                            <span>{`"${d.label1}"`}</span>
                             <span className="text-slate-500">↔</span>
-                            <span>"{d.label2}"</span>
+                            <span>{`"${d.label2}"`}</span>
                             <span className="text-slate-500">({d.area1} / {d.area2})</span>
                             <span className="text-emerald-400">{Math.round(d.similarity * 100)}%</span>
                           </div>
@@ -1584,9 +1584,9 @@ function NetworkTab({
                         {graphData.similarity_audit.details.similar.slice(0, 5).map((d, i) => (
                           <div key={i} className="flex items-center gap-2 text-slate-300">
                             <span className="text-cyan-400">•</span>
-                            <span>"{d.label1}"</span>
+                            <span>{`"${d.label1}"`}</span>
                             <span className="text-slate-500">↔</span>
-                            <span>"{d.label2}"</span>
+                            <span>{`"${d.label2}"`}</span>
                             <span className="text-slate-500">({d.area1} / {d.area2})</span>
                             <span className="text-emerald-400">{Math.round(d.similarity * 100)}%</span>
                           </div>

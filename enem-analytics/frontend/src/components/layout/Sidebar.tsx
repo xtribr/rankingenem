@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
+import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
   School,
@@ -310,7 +311,7 @@ function MenuItem({
   isActive, 
   collapsed 
 }: { 
-  item: { icon: any; label: string; href: string; badge?: { text: string; color: string } | null }; 
+  item: { icon: LucideIcon; label: string; href: string; badge?: { text: string; color: string } | null };
   isActive: boolean; 
   collapsed: boolean;
 }) {

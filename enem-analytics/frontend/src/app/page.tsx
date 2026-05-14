@@ -1,17 +1,44 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { getLatestEnemYear, getNextEnemYear, getYearRangeLabel } from '@/lib/enem-cycle';
-import { formatNumber, formatTriScore } from '@/lib/utils';
+import Image from 'next/image';
 import Link from 'next/link';
 import {
-  Trophy, School, Calendar, MapPin, Bell, Sparkles,
-  TrendingUp, Medal, Award, Target, BookOpen,
-  ArrowRight, Star, Zap
+  ArrowRight,
+  BarChart3,
+  Bell,
+  Calendar,
+  ChevronRight,
+  Database,
+  GraduationCap,
+  MapPin,
+  Medal,
+  School,
+  Search,
+  ShieldCheck,
+  Target,
 } from 'lucide-react';
+import { api, type TopSchool } from '@/lib/api';
+import { getLatestEnemYear, getNextEnemYear, getYearRangeLabel } from '@/lib/enem-cycle';
+import { formatNumber, formatTriScore } from '@/lib/utils';
 import { Sparkline } from '@/components/ui/sparkline';
-import { StatCardSkeleton, AreaCardSkeleton, TableRowSkeleton } from '@/components/ui/skeleton';
+import { AreaCardSkeleton, StatCardSkeleton, TableRowSkeleton } from '@/components/ui/skeleton';
+
+type StatTone = 'blue' | 'emerald' | 'amber' | 'slate';
+type AreaTone = 'emerald' | 'blue' | 'violet' | 'orange' | 'rose';
+
+const areaCards: Array<{
+  label: string;
+  shortLabel: string;
+  metric: keyof NonNullable<Awaited<ReturnType<typeof api.getStats>>>['avg_scores'];
+  tone: AreaTone;
+}> = [
+  { label: 'Ciências da Natureza', shortLabel: 'Natureza', metric: 'nota_cn', tone: 'emerald' },
+  { label: 'Ciências Humanas', shortLabel: 'Humanas', metric: 'nota_ch', tone: 'blue' },
+  { label: 'Linguagens', shortLabel: 'Linguagens', metric: 'nota_lc', tone: 'violet' },
+  { label: 'Matemática', shortLabel: 'Matemática', metric: 'nota_mt', tone: 'orange' },
+  { label: 'Redação', shortLabel: 'Redação', metric: 'nota_redacao', tone: 'rose' },
+];
 
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useQuery({
@@ -29,72 +56,119 @@ export default function Dashboard() {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
-    year: 'numeric'
+    year: 'numeric',
   });
   const latestDataYear = getLatestEnemYear(stats?.years);
   const nextEnemYear = getNextEnemYear(stats?.years);
   const yearRangeLabel = getYearRangeLabel(stats?.years);
+  const schools = topSchools?.schools ?? [];
+  const leader = schools[0];
+  const dataCoverageLabel = stats?.years?.length
+    ? `${yearRangeLabel} · ${stats.states.length} UFs`
+    : 'Base histórica em carregamento';
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Page Header */}
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-20">
-        <div className="px-6 py-4">
-          <div className="flex items-center justify-between">
+    <div className="min-h-screen bg-[#f5fbff]">
+      <header className="sticky top-0 z-20 border-b border-[#28B7ED]/20 bg-white/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 px-4 py-3 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[#28B7ED]/20 bg-white shadow-sm">
+              <Image src="/logo-x.png" alt="Logo XTRI" width={42} height={42} className="h-10 w-10 object-contain" priority />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-[#28B7ED]">
+                <ShieldCheck className="h-4 w-4" />
+                Painel executivo
+              </div>
+              <h1 className="mt-1 truncate text-xl font-bold text-slate-950 sm:text-2xl">Ranking ENEM XTRI</h1>
+              <p className="mt-0.5 text-xs capitalize text-slate-500 sm:text-sm">{dateStr}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Link
+              href="/schools"
+              className="hidden items-center gap-2 rounded-xl border border-[#28B7ED]/20 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[#28B7ED]/50 hover:text-[#28B7ED] sm:flex"
+            >
+              <Search className="h-4 w-4" />
+              Buscar escola
+            </Link>
+            <button
+              className="relative rounded-xl border border-[#28B7ED]/20 bg-white p-2.5 text-slate-600 shadow-sm transition hover:border-[#FF4B2E]/40 hover:text-[#FF4B2E]"
+              aria-label="Ver notificações"
+            >
+              <Bell className="h-5 w-5" />
+              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[#FF4B2E]" />
+            </button>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#28B7ED] to-[#FF4B2E] text-sm font-black text-white shadow-lg shadow-[#28B7ED]/20">
+              AD
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-[1600px] space-y-5 px-4 py-5 sm:px-6 sm:py-6">
+        <section className="relative overflow-hidden rounded-[1.75rem] border border-[#28B7ED]/25 bg-[#061927] text-white shadow-xl shadow-[#28B7ED]/10">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_0%,rgba(40,183,237,0.58),transparent_34%),radial-gradient(circle_at_86%_18%,rgba(255,75,46,0.48),transparent_31%),linear-gradient(135deg,rgba(40,183,237,0.14),rgba(255,75,46,0.08))]" />
+          <div className="pointer-events-none absolute -right-16 -top-24 hidden h-80 w-80 rotate-6 rounded-[4rem] border-[34px] border-white/10 opacity-80 lg:block" />
+          <div className="pointer-events-none absolute right-2 top-16 hidden h-32 w-32 rounded-[2rem] border-[18px] border-[#FF4B2E]/20 opacity-70 lg:block" />
+          <div className="relative grid gap-6 p-5 sm:p-7 lg:grid-cols-[1.35fr_0.65fr] lg:items-end">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Dashboard ENEM</h1>
-              <p className="text-sm text-slate-500 capitalize mt-0.5">{dateStr}</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <button className="p-2.5 hover:bg-slate-100 rounded-xl transition-all duration-200 relative">
-                <Bell className="h-5 w-5 text-slate-600" />
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full"></span>
-              </button>
-              <div className="h-10 w-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-full flex items-center justify-center text-white text-sm font-semibold shadow-lg shadow-blue-200">
-                AD
+              <div className="mb-5 inline-flex items-center gap-2 rounded-2xl border border-white/15 bg-white/95 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-slate-950 shadow-lg shadow-black/10">
+                <span className="h-2.5 w-2.5 rounded-full bg-[#28B7ED]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-[#FF4B2E]" />
+                XTRI EdTech
               </div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-[#DFF7FF] backdrop-blur">
+                <Database className="h-3.5 w-3.5" />
+                {statsLoading ? 'Carregando base histórica' : `Base ENEM ${dataCoverageLabel}`}
+              </div>
+              <h2 className="mt-5 max-w-3xl text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">
+                Decisões pedagógicas guiadas por ranking, TRI e evidência histórica.
+              </h2>
+              <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
+                A primeira leitura deve responder rápido: quem lidera, qual é o padrão nacional e onde vale aprofundar o diagnóstico por escola.
+              </p>
+
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                <Link
+                  href="/schools"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-[#E9F8FE]"
+                >
+                  Ver ranking completo
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+                <Link
+                  href="/compare"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[#FF4B2E]/50 bg-[#FF4B2E]/20 px-5 py-3 text-sm font-bold text-white backdrop-blur transition hover:bg-[#FF4B2E]/30"
+                >
+                  Comparar escolas
+                  <ChevronRight className="h-4 w-4" />
+                </Link>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+              <ExecutiveSignal
+                label="Liderança atual"
+                value={leader ? `#${leader.ranking}` : '...'}
+                detail={leader?.nome_escola ?? 'Aguardando ranking'}
+              />
+              <ExecutiveSignal
+                label="Último ano carregado"
+                value={latestDataYear ? String(latestDataYear) : '...'}
+                detail={nextEnemYear ? `ENEM ${nextEnemYear} entra após divulgação do INEP` : 'Dados oficiais do INEP'}
+              />
+              <ExecutiveSignal
+                label="Critério principal"
+                value="TRI"
+                detail="Notas não são proporcionais aos acertos; padrão de resposta importa."
+              />
             </div>
           </div>
-        </div>
-      </div>
+        </section>
 
-      <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
-        {/* Upcoming ENEM Cycle Banner */}
-        <div className="relative overflow-hidden rounded-2xl p-6 text-white" style={{ background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #0ea5e9 100%)' }}>
-          <div className="relative z-10 flex items-center justify-between">
-            <div className="flex items-center gap-5">
-              <div className="p-4 rounded-2xl bg-white/20 backdrop-blur-sm">
-                <Sparkles className="h-8 w-8" />
-              </div>
-              <div>
-                <div className="flex items-center gap-3">
-                  <h2 className="text-xl font-bold">ENEM {nextEnemYear || 'Próximo Ciclo'} - Em Breve!</h2>
-                  <span className="px-3 py-1 rounded-full bg-white/20 text-xs font-semibold backdrop-blur-sm">
-                    Próximo ciclo
-                  </span>
-                </div>
-                <p className="text-white/90 text-sm mt-1.5 max-w-xl">
-                  {latestDataYear
-                    ? `Os dados reais de ${nextEnemYear} serão integrados assim que divulgados pelo INEP. A base atual vai até ${latestDataYear}.`
-                    : 'Os próximos dados do ENEM serão integrados assim que divulgados pelo INEP.'}{' '}
-                  Prepare-se para novas análises e predições.
-                </p>
-              </div>
-            </div>
-            <div className="hidden md:flex items-center gap-4">
-              <div className="flex -space-x-2">
-                <div className="w-10 h-10 rounded-full bg-yellow-400 flex items-center justify-center text-yellow-900 font-bold text-lg">🥇</div>
-                <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center text-gray-700 font-bold text-lg">🥈</div>
-                <div className="w-10 h-10 rounded-full bg-orange-400 flex items-center justify-center text-orange-900 font-bold text-lg">🥉</div>
-              </div>
-            </div>
-          </div>
-          <div className="absolute -right-20 -top-20 w-60 h-60 bg-white/10 rounded-full blur-3xl"></div>
-          <div className="absolute -left-20 -bottom-20 w-48 h-48 bg-white/10 rounded-full blur-2xl"></div>
-        </div>
-
-        {/* Stats Cards - Novo Design */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+        <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           {statsLoading ? (
             <>
               <StatCardSkeleton />
@@ -106,417 +180,511 @@ export default function Dashboard() {
             <>
               <StatCard
                 icon={School}
-                label="Total de Escolas"
+                label="Escolas analisadas"
                 value={stats?.total_schools.toLocaleString('pt-BR') || '-'}
-                subtitle="Cadastradas no sistema"
-                trend="+5.2%"
-                trendUp={true}
-                color="blue"
+                subtitle="Unidades com registros ENEM consolidados"
+                badge="Base real"
+                tone="blue"
               />
               <StatCard
                 icon={Calendar}
-                label="Anos de Dados"
+                label="Anos de dados"
                 value={`${stats?.years.length || 0}`}
                 subtitle={yearRangeLabel}
-                trend="Completo"
-                trendUp={true}
-                color="emerald"
+                badge="Série histórica"
+                tone="emerald"
               />
               <StatCard
-                icon={Trophy}
-                label="Total de Registros"
-                value={stats?.total_records.toLocaleString('pt-BR') || '-'}
-                subtitle="Notas analisadas"
-                trend="+12%"
-                trendUp={true}
-                color="amber"
+                icon={BarChart3}
+                label="Registros avaliados"
+                value={formatNumber(stats?.total_records ?? 0)}
+                subtitle="Linhas históricas usadas nos agregados"
+                badge="Auditável"
+                tone="amber"
               />
               <StatCard
                 icon={MapPin}
-                label="Cobertura"
+                label="Cobertura geográfica"
                 value={`${stats?.states.length || 0}`}
-                subtitle="Estados + DF"
-                trend="100%"
-                trendUp={true}
-                color="violet"
+                subtitle="Estados e Distrito Federal"
+                badge="Nacional"
+                tone="slate"
               />
             </>
           )}
-        </div>
+        </section>
 
-        {/* Average Scores - Cards Interativos */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-indigo-100 rounded-xl">
-                <Target className="h-5 w-5 text-indigo-600" />
-              </div>
+        <section className="grid grid-cols-1 gap-5 xl:grid-cols-[0.88fr_1.12fr]">
+          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-xl font-bold text-slate-900">Médias Nacionais</h2>
-                <p className="text-sm text-slate-500">Desempenho médio por área do conhecimento</p>
-              </div>
-            </div>
-            <span className="text-sm text-slate-400">
-              {statsLoading ? 'Carregando base histórica…' : `Baseado em ${stats?.total_records.toLocaleString('pt-BR')} registros`}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {statsLoading ? (
-              <>
-                <AreaCardSkeleton />
-                <AreaCardSkeleton />
-                <AreaCardSkeleton />
-                <AreaCardSkeleton />
-                <AreaCardSkeleton />
-              </>
-            ) : (
-              [
-              {
-                label: 'Ciências da Natureza',
-                shortLabel: 'Natureza',
-                value: stats?.avg_scores.nota_cn,
-                icon: '🧬',
-                gradient: 'from-emerald-500 to-teal-600',
-                bgColor: 'bg-emerald-50',
-                textColor: 'text-emerald-700'
-              },
-              {
-                label: 'Ciências Humanas',
-                shortLabel: 'Humanas',
-                value: stats?.avg_scores.nota_ch,
-                icon: '📚',
-                gradient: 'from-blue-500 to-indigo-600',
-                bgColor: 'bg-blue-50',
-                textColor: 'text-blue-700'
-              },
-              {
-                label: 'Linguagens',
-                shortLabel: 'Linguagens',
-                value: stats?.avg_scores.nota_lc,
-                icon: '✍️',
-                gradient: 'from-violet-500 to-purple-600',
-                bgColor: 'bg-violet-50',
-                textColor: 'text-violet-700'
-              },
-              {
-                label: 'Matemática',
-                shortLabel: 'Matemática',
-                value: stats?.avg_scores.nota_mt,
-                icon: '📐',
-                gradient: 'from-orange-500 to-amber-600',
-                bgColor: 'bg-orange-50',
-                textColor: 'text-orange-700'
-              },
-              {
-                label: 'Redação',
-                shortLabel: 'Redação',
-                value: stats?.avg_scores.nota_redacao,
-                icon: '📝',
-                gradient: 'from-rose-500 to-pink-600',
-                bgColor: 'bg-rose-50',
-                textColor: 'text-rose-700'
-              },
-            ].map((item) => (
-              <div 
-                key={item.label} 
-                className="group relative overflow-hidden rounded-2xl p-5 bg-white border border-slate-100 hover:border-slate-200 hover:shadow-lg transition-all duration-300 cursor-pointer"
-              >
-                <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${item.gradient}`}></div>
-                <div className="flex items-start justify-between mb-3">
-                  <span className="text-2xl">{item.icon}</span>
-                  <span className={`text-xs font-semibold px-2 py-1 rounded-full ${item.bgColor} ${item.textColor}`}>
-                    Média
-                  </span>
+                <div className="flex items-center gap-2 text-sm font-bold text-[#28B7ED]">
+                  <Target className="h-5 w-5" />
+                  Leitura pedagógica
                 </div>
-                <p className="text-sm font-medium text-slate-600 mb-1">{item.shortLabel}</p>
-                <p className="text-3xl font-bold text-slate-900">{formatTriScore(item.value)}</p>
-                <p className="text-xs text-slate-400 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {item.label}
+                <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">
+                  Média nacional por área
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  Use esses valores como referência de contexto. Para intervenção, a decisão correta vem da escola, da evolução e da consistência TRI.
                 </p>
               </div>
-            ))
-            )}
-          </div>
-        </div>
+            </div>
 
-        {/* Top Schools - Tabela Premium */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="p-6 border-b border-slate-100">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-amber-100 rounded-xl">
-                  <Medal className="h-5 w-5 text-amber-600" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-slate-900">Top 10 Escolas</h2>
-                  <p className="text-sm text-slate-500">Melhores desempenhos ENEM {topSchools?.ano}</p>
-                </div>
-              </div>
-              <Link
-                href="/schools"
-                className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-xl font-medium hover:bg-blue-100 transition-colors group"
-              >
-                Ver ranking completo
-                <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-              </Link>
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+              {statsLoading ? (
+                <>
+                  <AreaCardSkeleton />
+                  <AreaCardSkeleton />
+                  <AreaCardSkeleton />
+                  <AreaCardSkeleton />
+                  <AreaCardSkeleton />
+                </>
+              ) : (
+                areaCards.map((item) => (
+                  <AreaScoreCard
+                    key={item.metric}
+                    label={item.label}
+                    shortLabel={item.shortLabel}
+                    value={stats?.avg_scores[item.metric]}
+                    tone={item.tone}
+                  />
+                ))
+              )}
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-50/80">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider w-24">
-                    Posição
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    Escola
-                  </th>
-                  <th className="px-6 py-4 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider w-20">
-                    UF
-                  </th>
-                  <th className="px-6 py-4 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider w-28">
-                    Tipo
-                  </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider w-28">
-                    Média
-                  </th>
-                  <th className="px-6 py-4 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider w-28 hidden md:table-cell">
-                    Tendência
-                  </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider w-24">
-                    Hab.
-                  </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider w-24 hidden lg:table-cell">
-                    CN
-                  </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider w-24 hidden lg:table-cell">
-                    CH
-                  </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider w-24 hidden lg:table-cell">
-                    LC
-                  </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider w-24 hidden lg:table-cell">
-                    MT
-                  </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider w-24 hidden xl:table-cell">
-                    RED
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {topLoading
-                  ? Array.from({ length: 10 }).map((_, i) => (
-                      <TableRowSkeleton key={i} cols={12} />
-                    ))
-                  : topSchools?.schools.map((school, index) => (
-                  <tr
-                    key={school.codigo_inep}
-                    className="group hover:bg-blue-50/30 transition-all duration-200"
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <RankingBadge ranking={school.ranking} index={index} />
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <SchoolAvatar name={school.nome_escola} ranking={school.ranking} />
-                        <div>
-                          <Link
-                            href={`/schools/${school.codigo_inep}`}
-                            className="font-semibold text-slate-900 hover:text-blue-600 transition-colors line-clamp-1"
-                          >
-                            {school.nome_escola}
-                          </Link>
-                          <p className="text-xs text-slate-400 font-mono">{school.codigo_inep}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <span className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold">
-                        {school.uf}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      {school.tipo_escola && (
-                        <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold ${
-                          school.tipo_escola === 'Privada'
-                            ? 'bg-purple-100 text-purple-700'
-                            : 'bg-emerald-100 text-emerald-700'
-                        }`}>
-                          {school.tipo_escola}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <span className="text-lg font-bold text-slate-900">{formatTriScore(school.nota_media)}</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap hidden md:table-cell">
-                      <div className="flex justify-center">
-                        <Sparkline data={school.history ?? []} />
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <span className="text-sm font-medium text-slate-600">
-                        {school.desempenho_habilidades
-                          ? `${(school.desempenho_habilidades * 100).toFixed(0)}%`
-                          : '-'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-slate-600 hidden lg:table-cell">
-                      {formatTriScore(school.nota_cn)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-slate-600 hidden lg:table-cell">
-                      {formatTriScore(school.nota_ch)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-slate-600 hidden lg:table-cell">
-                      {formatTriScore(school.nota_lc)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-slate-600 hidden lg:table-cell">
-                      {formatTriScore(school.nota_mt)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-slate-600 hidden xl:table-cell">
-                      {formatTriScore(school.nota_redacao)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+          <RankingPanel schools={schools} isLoading={topLoading} ano={topSchools?.ano} />
+        </section>
+      </main>
     </div>
   );
 }
 
-// Componente de Card de Estatística Melhorado
+function ExecutiveSignal({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.08] p-4 backdrop-blur">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#DFF7FF]/90">{label}</p>
+      <p className="mt-2 text-2xl font-black text-white">{value}</p>
+      <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-300">{detail}</p>
+    </div>
+  );
+}
+
 function StatCard({
   icon: Icon,
   label,
   value,
   subtitle,
-  trend,
-  trendUp,
-  color,
+  badge,
+  tone,
 }: {
   icon: React.ElementType;
   label: string;
   value: string;
   subtitle: string;
-  trend: string;
-  trendUp: boolean;
-  color: 'blue' | 'emerald' | 'amber' | 'violet';
+  badge: string;
+  tone: StatTone;
 }) {
-  const colors = {
+  const colors: Record<StatTone, { icon: string; badge: string; bar: string; surface: string }> = {
     blue: {
-      gradient: 'from-blue-500 to-blue-600',
-      bg: 'bg-blue-50',
-      text: 'text-blue-700',
-      light: 'bg-blue-500/10',
+      icon: 'bg-[#E9F8FE] text-[#139ED3]',
+      badge: 'bg-[#E9F8FE] text-[#139ED3]',
+      bar: 'from-[#28B7ED] to-[#70D8FF]',
+      surface: 'hover:border-[#28B7ED]/40 hover:shadow-[#28B7ED]/20',
     },
     emerald: {
-      gradient: 'from-emerald-500 to-emerald-600',
-      bg: 'bg-emerald-50',
-      text: 'text-emerald-700',
-      light: 'bg-emerald-500/10',
+      icon: 'bg-[#FFF0EB] text-[#FF4B2E]',
+      badge: 'bg-[#FFF0EB] text-[#FF4B2E]',
+      bar: 'from-[#FF4B2E] to-[#FF8A70]',
+      surface: 'hover:border-[#FF4B2E]/35 hover:shadow-[#FF4B2E]/15',
     },
     amber: {
-      gradient: 'from-amber-500 to-amber-600',
-      bg: 'bg-amber-50',
-      text: 'text-amber-700',
-      light: 'bg-amber-500/10',
+      icon: 'bg-[#FFF0EB] text-[#FF4B2E]',
+      badge: 'bg-[#FFF0EB] text-[#FF4B2E]',
+      bar: 'from-[#28B7ED] via-[#FF7A59] to-[#FF4B2E]',
+      surface: 'hover:border-[#FF4B2E]/35 hover:shadow-[#FF4B2E]/15',
     },
-    violet: {
-      gradient: 'from-violet-500 to-violet-600',
-      bg: 'bg-violet-50',
-      text: 'text-violet-700',
-      light: 'bg-violet-500/10',
+    slate: {
+      icon: 'bg-slate-100 text-slate-700',
+      badge: 'bg-[#E9F8FE] text-slate-700',
+      bar: 'from-[#28B7ED] to-[#FF4B2E]',
+      surface: 'hover:border-[#28B7ED]/30 hover:shadow-slate-200/80',
     },
   };
-
-  const theme = colors[color];
+  const theme = colors[tone];
 
   return (
-    <div className="group bg-white rounded-2xl p-6 border border-slate-100 hover:border-slate-200 hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1 transition-all duration-300">
-      <div className="flex items-start justify-between mb-4">
-        <div className={`p-3.5 rounded-xl ${theme.bg} group-hover:scale-110 transition-transform duration-300`}>
-          <Icon className={`h-6 w-6 ${theme.text}`} />
+    <div className={`group rounded-[1.35rem] border border-slate-200 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:shadow-lg ${theme.surface}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className={`rounded-2xl p-3 ${theme.icon}`}>
+          <Icon className="h-5 w-5" />
         </div>
-        <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${
-          trendUp ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
-        }`}>
-          <TrendingUp className="h-3 w-3" />
-          {trend}
-        </div>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${theme.badge}`}>{badge}</span>
       </div>
-      
-      <div>
-        <p className="text-3xl font-bold text-slate-900 mb-1">{value}</p>
-        <p className="text-sm font-medium text-slate-700 mb-0.5">{label}</p>
-        <p className="text-xs text-slate-400">{subtitle}</p>
-      </div>
-      
-      <div className={`mt-4 h-1.5 w-full rounded-full ${theme.light} overflow-hidden`}>
-        <div className={`h-full rounded-full bg-gradient-to-r ${theme.gradient} w-3/4 group-hover:w-full transition-all duration-500`}></div>
+
+      <p className="mt-5 text-3xl font-black tracking-tight text-slate-950">{value}</p>
+      <p className="mt-1 text-sm font-bold text-slate-700">{label}</p>
+      <p className="mt-1 text-xs leading-5 text-slate-500">{subtitle}</p>
+
+      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-100">
+        <div className={`h-full w-2/3 rounded-full bg-gradient-to-r ${theme.bar} transition-all duration-500 group-hover:w-full`} />
       </div>
     </div>
   );
 }
 
-// Badge de Ranking com Medalhas
-function RankingBadge({ ranking, index }: { ranking: number; index: number }) {
-  if (ranking === 1) {
-    return (
-      <div className="flex items-center gap-2">
-        <span className="text-3xl">🥇</span>
-        <span className="text-lg font-bold text-amber-600">#{ranking}</span>
-      </div>
-    );
-  }
-  if (ranking === 2) {
-    return (
-      <div className="flex items-center gap-2">
-        <span className="text-3xl">🥈</span>
-        <span className="text-lg font-bold text-slate-600">#{ranking}</span>
-      </div>
-    );
-  }
-  if (ranking === 3) {
-    return (
-      <div className="flex items-center gap-2">
-        <span className="text-3xl">🥉</span>
-        <span className="text-lg font-bold text-orange-600">#{ranking}</span>
-      </div>
-    );
-  }
-  
+function AreaScoreCard({
+  label,
+  shortLabel,
+  value,
+  tone,
+}: {
+  label: string;
+  shortLabel: string;
+  value?: number | null;
+  tone: AreaTone;
+}) {
+  const colors: Record<AreaTone, { accent: string; text: string; surface: string }> = {
+    emerald: {
+      accent: 'bg-[#28B7ED]',
+      text: 'text-[#139ED3]',
+      surface: 'bg-[#E9F8FE]/70 border-[#28B7ED]/20',
+    },
+    blue: {
+      accent: 'bg-[#28B7ED]',
+      text: 'text-[#139ED3]',
+      surface: 'bg-[#E9F8FE]/70 border-[#28B7ED]/20',
+    },
+    violet: {
+      accent: 'bg-[#FF4B2E]',
+      text: 'text-[#E43E24]',
+      surface: 'bg-[#FFF0EB]/70 border-[#FF4B2E]/20',
+    },
+    orange: {
+      accent: 'bg-[#FF4B2E]',
+      text: 'text-[#E43E24]',
+      surface: 'bg-[#FFF0EB]/70 border-[#FF4B2E]/20',
+    },
+    rose: {
+      accent: 'bg-gradient-to-r from-[#28B7ED] to-[#FF4B2E]',
+      text: 'text-slate-800',
+      surface: 'bg-white border-[#28B7ED]/20',
+    },
+  };
+  const theme = colors[tone];
+
   return (
-    <span className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-slate-100 text-slate-600 text-lg font-bold">
-      #{ranking}
+    <div className={`rounded-2xl border p-4 ${theme.surface}`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className={`text-sm font-black ${theme.text}`}>{shortLabel}</p>
+          <p className="mt-1 truncate text-xs text-slate-500" title={label}>
+            {label}
+          </p>
+        </div>
+        <span className={`h-3 w-3 rounded-full ${theme.accent}`} />
+      </div>
+      <div className="mt-4 flex items-end justify-between gap-3">
+        <p className="text-3xl font-black tracking-tight text-slate-950">{formatTriScore(value)}</p>
+        <p className="pb-1 text-right text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+          média TRI
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function RankingPanel({
+  schools,
+  isLoading,
+  ano,
+}: {
+  schools: TopSchool[];
+  isLoading: boolean;
+  ano?: number;
+}) {
+  return (
+    <div className="overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-100 p-5 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="rounded-2xl bg-[#FFF0EB] p-3 text-[#FF4B2E]">
+              <Medal className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black tracking-tight text-slate-950">Top 10 escolas</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                {ano ? `Melhores desempenhos consolidados no ENEM ${ano}` : 'Ranking em carregamento'}
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/schools"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#28B7ED] to-[#FF4B2E] px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-[#28B7ED]/20 transition hover:brightness-105"
+          >
+            Ranking completo
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </div>
+
+      <div className="lg:hidden">
+        {isLoading ? (
+          <div className="space-y-3 p-4">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <div key={index} className="h-32 animate-pulse rounded-2xl bg-slate-100" />
+            ))}
+          </div>
+        ) : schools.length > 0 ? (
+          <div className="space-y-3 p-4">
+            {schools.map((school) => (
+              <SchoolRankingCard key={school.codigo_inep} school={school} />
+            ))}
+          </div>
+        ) : (
+          <EmptyRankingState />
+        )}
+      </div>
+
+      <div className="hidden overflow-x-auto lg:block">
+        <table className="w-full">
+          <thead className="bg-slate-50/80">
+            <tr>
+              <th className="w-24 px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                Posição
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                Escola
+              </th>
+              <th className="w-20 px-6 py-4 text-center text-xs font-bold uppercase tracking-wider text-slate-500">
+                UF
+              </th>
+              <th className="w-28 px-6 py-4 text-center text-xs font-bold uppercase tracking-wider text-slate-500">
+                Tipo
+              </th>
+              <th className="w-28 px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-slate-500">
+                Média TRI
+              </th>
+              <th className="w-28 px-6 py-4 text-center text-xs font-bold uppercase tracking-wider text-slate-500">
+                Série
+              </th>
+              <th className="w-28 px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-slate-500">
+                Hab.
+              </th>
+              <th className="w-20 px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-slate-500">
+                CN
+              </th>
+              <th className="w-20 px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-slate-500">
+                CH
+              </th>
+              <th className="w-20 px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-slate-500">
+                LC
+              </th>
+              <th className="w-20 px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-slate-500">
+                MT
+              </th>
+              <th className="w-20 px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-slate-500">
+                RED
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {isLoading ? (
+              Array.from({ length: 10 }).map((_, index) => <TableRowSkeleton key={index} cols={12} />)
+            ) : schools.length > 0 ? (
+              schools.map((school) => (
+                <tr key={school.codigo_inep} className="group transition hover:bg-[#E9F8FE]/60">
+                  <td className="whitespace-nowrap px-6 py-4">
+                    <RankingBadge ranking={school.ranking} />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <SchoolAvatar name={school.nome_escola} ranking={school.ranking} />
+                      <div className="min-w-0">
+                        <Link
+                          href={`/schools/${school.codigo_inep}`}
+                          className="line-clamp-1 font-bold text-slate-950 transition hover:text-[#28B7ED]"
+                        >
+                          {school.nome_escola}
+                        </Link>
+                        <p className="font-mono text-xs text-slate-400">{school.codigo_inep}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="whitespace-nowrap px-6 py-4 text-center">
+                    <UfBadge uf={school.uf} />
+                  </td>
+                  <td className="whitespace-nowrap px-6 py-4 text-center">
+                    <SchoolTypeBadge type={school.tipo_escola} />
+                  </td>
+                  <td className="whitespace-nowrap px-6 py-4 text-right">
+                    <span className="text-lg font-black text-slate-950">{formatTriScore(school.nota_media)}</span>
+                  </td>
+                  <td className="whitespace-nowrap px-6 py-4">
+                    <div className="flex justify-center">
+                      <Sparkline data={school.history ?? []} />
+                    </div>
+                  </td>
+                  <td className="whitespace-nowrap px-6 py-4 text-right">
+                    <span className="text-sm font-bold text-slate-700">{formatSkillScore(school.desempenho_habilidades)}</span>
+                  </td>
+                  <td className="whitespace-nowrap px-6 py-4 text-right text-slate-600">{formatTriScore(school.nota_cn)}</td>
+                  <td className="whitespace-nowrap px-6 py-4 text-right text-slate-600">{formatTriScore(school.nota_ch)}</td>
+                  <td className="whitespace-nowrap px-6 py-4 text-right text-slate-600">{formatTriScore(school.nota_lc)}</td>
+                  <td className="whitespace-nowrap px-6 py-4 text-right text-slate-600">{formatTriScore(school.nota_mt)}</td>
+                  <td className="whitespace-nowrap px-6 py-4 text-right text-slate-600">{formatTriScore(school.nota_redacao)}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={12}>
+                  <EmptyRankingState />
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function SchoolRankingCard({ school }: { school: TopSchool }) {
+  return (
+    <Link
+      href={`/schools/${school.codigo_inep}`}
+      className="block rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-[#28B7ED]/40 hover:shadow-md"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <SchoolAvatar name={school.nome_escola} ranking={school.ranking} />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <RankingBadge ranking={school.ranking} compact />
+              <UfBadge uf={school.uf} />
+            </div>
+            <h3 className="mt-2 line-clamp-2 text-sm font-black leading-5 text-slate-950">{school.nome_escola}</h3>
+            <p className="mt-1 font-mono text-xs text-slate-400">{school.codigo_inep}</p>
+          </div>
+        </div>
+        <ChevronRight className="mt-1 h-5 w-5 flex-shrink-0 text-slate-300" />
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <MiniMetric label="Média TRI" value={formatTriScore(school.nota_media)} strong />
+        <MiniMetric label="Hab." value={formatSkillScore(school.desempenho_habilidades)} />
+      </div>
+
+      <div className="mt-3 grid grid-cols-5 gap-1.5 text-center">
+        <AreaPill label="CN" value={school.nota_cn} />
+        <AreaPill label="CH" value={school.nota_ch} />
+        <AreaPill label="LC" value={school.nota_lc} />
+        <AreaPill label="MT" value={school.nota_mt} />
+        <AreaPill label="RED" value={school.nota_redacao} />
+      </div>
+    </Link>
+  );
+}
+
+function MiniMetric({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-3">
+      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">{label}</p>
+      <p className={`mt-1 ${strong ? 'text-xl' : 'text-lg'} font-black text-slate-950`}>{value}</p>
+    </div>
+  );
+}
+
+function AreaPill({ label, value }: { label: string; value: number | null }) {
+  return (
+    <div className="rounded-xl bg-slate-50 px-2 py-2">
+      <p className="text-[10px] font-black text-slate-400">{label}</p>
+      <p className="mt-1 text-xs font-bold text-slate-700">{formatTriScore(value)}</p>
+    </div>
+  );
+}
+
+function EmptyRankingState() {
+  return (
+    <div className="p-8 text-center">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+        <GraduationCap className="h-7 w-7" />
+      </div>
+      <h3 className="mt-4 text-base font-black text-slate-950">Ranking indisponível no momento</h3>
+      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+        Quando a API retornar os dados, esta área mostra as escolas líderes e permite abrir o diagnóstico individual.
+      </p>
+    </div>
+  );
+}
+
+function RankingBadge({ ranking, compact = false }: { ranking: number; compact?: boolean }) {
+  const medal = ranking === 1 ? '1º' : ranking === 2 ? '2º' : ranking === 3 ? '3º' : `#${ranking}`;
+  const color =
+    ranking === 1
+      ? 'bg-[#FFF0EB] text-[#FF4B2E] border-[#FF4B2E]/20'
+      : ranking === 2
+        ? 'bg-slate-100 text-slate-700 border-slate-200'
+        : ranking === 3
+          ? 'bg-[#FFF0EB] text-[#E43E24] border-[#FF4B2E]/20'
+          : 'bg-[#E9F8FE] text-[#139ED3] border-[#28B7ED]/20';
+
+  return (
+    <span
+      className={`inline-flex items-center justify-center rounded-xl border font-black ${color} ${
+        compact ? 'h-7 px-2 text-xs' : 'h-11 min-w-11 px-3 text-sm'
+      }`}
+    >
+      {medal}
     </span>
   );
 }
 
-// Avatar da Escola com Iniciais
 function SchoolAvatar({ name, ranking }: { name: string; ranking: number }) {
-  const getInitials = (name: string) => {
-    const words = name.split(' ').filter(w => w.length > 2);
-    if (words.length >= 2) {
-      return (words[0][0] + words[1][0]).toUpperCase();
-    }
-    return name.substring(0, 2).toUpperCase();
-  };
-
-  const getGradient = (ranking: number) => {
-    if (ranking === 1) return 'from-amber-400 to-amber-600';
-    if (ranking === 2) return 'from-slate-400 to-slate-600';
-    if (ranking === 3) return 'from-orange-400 to-orange-600';
-    return 'from-blue-500 to-indigo-600';
-  };
+  const words = name.split(' ').filter((word) => word.length > 2);
+  const initials = words.length >= 2
+    ? `${words[0][0]}${words[1][0]}`.toUpperCase()
+    : name.substring(0, 2).toUpperCase();
+  const gradient =
+    ranking === 1
+      ? 'from-[#FF7A59] to-[#FF4B2E]'
+      : ranking === 2
+        ? 'from-slate-400 to-slate-600'
+        : ranking === 3
+          ? 'from-[#FF9B84] to-[#FF4B2E]'
+          : 'from-[#28B7ED] to-[#139ED3]';
 
   return (
-    <div className={`h-11 w-11 rounded-xl bg-gradient-to-br ${getGradient(ranking)} flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-blue-200/50 flex-shrink-0`}>
-      {getInitials(name)}
+    <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${gradient} text-sm font-black text-white shadow-lg shadow-[#28B7ED]/20`}>
+      {initials}
     </div>
   );
+}
+
+function UfBadge({ uf }: { uf: string | null }) {
+  return (
+    <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-xl bg-slate-100 px-2 text-xs font-black text-slate-700">
+      {uf || '--'}
+    </span>
+  );
+}
+
+function SchoolTypeBadge({ type }: { type: string | null }) {
+  if (!type) {
+    return <span className="text-xs font-semibold text-slate-400">--</span>;
+  }
+
+  const isPrivate = type === 'Privada';
+  return (
+    <span className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-bold ${
+      isPrivate ? 'bg-[#E9F8FE] text-[#139ED3]' : 'bg-[#FFF0EB] text-[#FF4B2E]'
+    }`}>
+      {type}
+    </span>
+  );
+}
+
+function formatSkillScore(value: number | null) {
+  return typeof value === 'number' ? `${(value * 100).toFixed(0)}%` : '--';
 }

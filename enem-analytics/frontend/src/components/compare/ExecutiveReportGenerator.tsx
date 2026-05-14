@@ -33,6 +33,12 @@ export interface ReportData {
   generatedAt: Date;
 }
 
+export interface GeneratedReportFile {
+  filename: string;
+  url: string;
+  size: number;
+}
+
 // Brand colors
 const XTRI_PURPLE = [147, 51, 234] as const;
 const XTRI_BLUE = [59, 130, 246] as const;
@@ -44,7 +50,7 @@ const GRAY_400 = [156, 163, 175] as const;
 const GRAY_200 = [229, 231, 235] as const;
 const GRAY_100 = [243, 244, 246] as const;
 
-export function generateExecutiveReport(data: ReportData): void {
+export function generateExecutiveReport(data: ReportData): GeneratedReportFile {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -429,9 +435,25 @@ export function generateExecutiveReport(data: ReportData): void {
 
   addPageFooter(2, 2);
 
-  // Save
+  // Save with an explicit browser download path. This is more reliable in
+  // embedded browsers than relying only on jsPDF's internal FileSaver path.
   const filename = `XTRI_Relatorio_Executivo_${data.school1.nome_escola.slice(0, 12).replace(/\s/g, '_')}_vs_${data.school2.nome_escola.slice(0, 12).replace(/\s/g, '_')}.pdf`;
-  doc.save(filename);
+  const blob = doc.output('blob');
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.rel = 'noopener';
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  return {
+    filename,
+    url,
+    size: blob.size,
+  };
 }
 
 export default generateExecutiveReport;

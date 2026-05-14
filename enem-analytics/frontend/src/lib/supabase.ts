@@ -59,6 +59,21 @@ interface AuthMeResponse {
  * Sign in with email and password
  */
 export async function signIn(email: string, password: string) {
+  const isLocalSupabase = SUPABASE_URL.includes('127.0.0.1') || SUPABASE_URL.includes('localhost');
+
+  if (isLocalSupabase) {
+    try {
+      await fetch(`${SUPABASE_URL}/auth/v1/health`, {
+        method: 'GET',
+        cache: 'no-store',
+      });
+    } catch {
+      throw new Error(
+        'Não foi possível conectar ao Supabase Auth local. Inicie o Supabase local ou ajuste NEXT_PUBLIC_SUPABASE_URL.'
+      );
+    }
+  }
+
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
