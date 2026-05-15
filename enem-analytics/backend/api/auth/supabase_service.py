@@ -171,22 +171,19 @@ def authenticate_with_token(access_token: str) -> Optional[UserProfile]:
         )
         return profile
 
-    if not profile:
-        # Create profile from user metadata if missing
-        metadata = user_data.get("user_metadata", {})
-        profile = UserProfile(
-            id=user_data["id"],
-            email=resolve_user_email(
-                user_data["id"],
-                token_email=user_data.get("email", ""),
-                access_token=access_token,
-            ),
-            codigo_inep=metadata.get("codigo_inep", ""),
-            nome_escola=metadata.get("nome_escola", ""),
-            is_admin=metadata.get("is_admin", False)
-        )
-
-    return profile
+    # No profile found — build one from user metadata
+    metadata = user_data.get("user_metadata", {})
+    return UserProfile(
+        id=user_data["id"],
+        email=resolve_user_email(
+            user_data["id"],
+            token_email=user_data.get("email", ""),
+            access_token=access_token,
+        ),
+        codigo_inep=metadata.get("codigo_inep", ""),
+        nome_escola=metadata.get("nome_escola", ""),
+        is_admin=metadata.get("is_admin", False),
+    )
 
 
 def create_profile(

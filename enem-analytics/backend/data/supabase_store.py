@@ -4,21 +4,15 @@ Replaces DuckDB + CSV - data lives in Supabase Postgres.
 """
 
 import logging
-import os
 import re
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-from supabase import create_client, Client
+from supabase import Client
 
 from data.year_resolver import find_latest_enem_results_file, get_file_year
 
 logger = logging.getLogger(__name__)
-
-_client: Optional[Client] = None
-
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 
 _BACKEND_DATA_DIR = Path(__file__).resolve().parent
 
@@ -29,14 +23,9 @@ def _sanitize_search(value: str) -> str:
 
 
 def get_client() -> Client:
-    global _client
-    if _client is None:
-        if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-            raise RuntimeError(
-                "Supabase not configured. Set SUPABASE_URL and SUPABASE_SERVICE_KEY"
-            )
-        _client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-    return _client
+    """Return the shared Supabase client from supabase_service."""
+    from api.auth.supabase_service import get_supabase
+    return get_supabase()
 
 
 def init_database():

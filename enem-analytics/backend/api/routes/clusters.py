@@ -51,7 +51,7 @@ async def get_all_personas(
     }
 
 
-@router.get("/train")
+@router.post("/train")
 async def train_model(
     _: UserProfile = Depends(get_current_admin),
 ):
