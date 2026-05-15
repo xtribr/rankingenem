@@ -5,6 +5,7 @@ Replaces DuckDB + CSV - data lives in Supabase Postgres.
 
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
@@ -20,6 +21,11 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 
 _BACKEND_DATA_DIR = Path(__file__).resolve().parent
+
+
+def _sanitize_search(value: str) -> str:
+    """Strip characters that could alter PostgREST filter syntax."""
+    return re.sub(r"[,.()\[\]\"']", "", value)
 
 
 def get_client() -> Client:
@@ -88,7 +94,8 @@ def list_schools(
     ).eq("ano", target_ano)
 
     if search:
-        query = query.or_(f"nome_escola.ilike.%{search}%,codigo_inep.ilike.%{search}%")
+        safe = _sanitize_search(search)
+        query = query.or_(f"nome_escola.ilike.%{safe}%,codigo_inep.ilike.%{safe}%")
     if uf:
         query = query.eq("uf", uf.upper())
     if tipo_escola:
@@ -210,10 +217,11 @@ def get_top_schools(
 def search_schools(q: str, limit: int = 20) -> List[Dict[str, Any]]:
     client = get_client()
 
+    safe_q = _sanitize_search(q)
     result = client.table("enem_results").select(
         "codigo_inep, nome_escola, uf, ano"
     ).or_(
-        f"nome_escola.ilike.%{q}%,codigo_inep.ilike.%{q}%"
+        f"nome_escola.ilike.%{safe_q}%,codigo_inep.ilike.%{safe_q}%"
     ).order("ano", desc=True).limit(limit * 5).execute()
 
     # Deduplicate: keep latest year per school

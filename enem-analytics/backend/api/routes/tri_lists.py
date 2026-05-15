@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/tri-lists", tags=["tri-lists"])
 
 # Load TRI content data
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
-DADOS_DIR = Path("/Volumes/notebook/GLiNER2/dados")
+DADOS_DIR = Path(os.getenv("DADOS_DIR", DATA_DIR / "listas"))
 
 # Cache for TRI content
 _tri_content = None
