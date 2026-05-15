@@ -6,11 +6,7 @@ Skill gap analysis and priority recommendations
 from fastapi import APIRouter, Depends, HTTPException, Query, Path as PathParam
 from pydantic import BaseModel
 from typing import Dict, List, Optional, Any
-import sys
 from pathlib import Path
-
-# Add parent to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from ml.diagnosis_engine import DiagnosisEngine
 from api.auth.authorization import get_authorized_school_user

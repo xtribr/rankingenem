@@ -214,11 +214,19 @@ def fetch_school_skills_from_supabase(codigo_inep: str, ano: Optional[int] = Non
 
 
 def get_available_years() -> List[int]:
-    """Get list of years with school skills data."""
+    """Get list of distinct years with school skills data."""
     supabase = get_supabase_store()
 
     try:
-        result = supabase.table("school_skills").select("ano").limit(1000).execute()
+        result = supabase.rpc("get_school_skills_years", {}).execute()
+        if result.data:
+            return sorted((r["ano"] for r in result.data), reverse=True)
+    except Exception:
+        pass
+
+    # Fallback: scan a sample (works even without the RPC function)
+    try:
+        result = supabase.table("school_skills").select("ano").limit(5000).execute()
         anos = sorted(set(r["ano"] for r in result.data), reverse=True)
         if anos:
             return anos

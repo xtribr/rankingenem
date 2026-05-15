@@ -5,12 +5,8 @@ School personas and similar schools
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
-import sys
-from pathlib import Path
 
-# Add parent to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
+import numpy as np
 from ml.clustering_model import SchoolClusteringModel
 from data.year_resolver import get_latest_year_from_df, get_previous_year_from_df
 from api.auth.authorization import get_authorized_school_user
@@ -192,13 +188,15 @@ async def get_cluster_stats(
         raise HTTPException(status_code=500, detail="No ENEM cycle available for clustering stats")
 
     df_latest = model.df[model.df['ano'] == latest_year]
-    cluster_sizes = {}
 
-    for _, row in df_latest.iterrows():
-        cluster_info = model.predict_cluster(row['codigo_inep'])
-        if cluster_info:
-            cluster = cluster_info['cluster']
-            cluster_sizes[cluster] = cluster_sizes.get(cluster, 0) + 1
+    # Batch predict: extract feature matrix, scale, and predict in one pass
+    features_df = df_latest[model.feature_cols].dropna()
+    cluster_sizes = {}
+    if len(features_df) > 0 and model.model is not None and model.scaler is not None:
+        X_scaled = model.scaler.transform(features_df.values)
+        labels = model.model.predict(X_scaled)
+        unique, counts = np.unique(labels, return_counts=True)
+        cluster_sizes = dict(zip(unique.tolist(), counts.tolist()))
 
     # Add sizes to summary
     for s in summary:

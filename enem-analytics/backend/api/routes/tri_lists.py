@@ -23,6 +23,17 @@ DADOS_DIR = Path(os.getenv("DADOS_DIR", DATA_DIR / "listas"))
 _tri_content = None
 _tri_content_gliner = None
 
+# Lazy singleton for prediction model (avoid re-loading on every request)
+_prediction_model = None
+
+
+def _get_prediction_model():
+    global _prediction_model
+    if _prediction_model is None:
+        from ml.prediction_model import ENEMPredictionModel
+        _prediction_model = ENEMPredictionModel()
+    return _prediction_model
+
 
 def get_tri_content() -> pd.DataFrame:
     """Load and cache TRI content"""
@@ -195,11 +206,8 @@ async def get_recommended_content(
     Uses the prediction model to determine appropriate TRI ranges
     for each area and returns targeted content with GLiNER-extracted entities.
     """
-    # Import prediction model
-    from ml.prediction_model import ENEMPredictionModel
-
     try:
-        model = ENEMPredictionModel()
+        model = _get_prediction_model()
         predictions = model.predict_all_scores(codigo_inep)
 
         if 'error' in predictions:
@@ -395,11 +403,8 @@ async def get_school_materials(
     Get downloadable materials filtered by school's recommended TRI ranges.
     Returns only materials within the amplitude suitable for the school's level.
     """
-    # Import prediction model
-    from ml.prediction_model import ENEMPredictionModel
-
     try:
-        model = ENEMPredictionModel()
+        model = _get_prediction_model()
         predictions = model.predict_all_scores(codigo_inep)
 
         if 'error' in predictions:
@@ -507,12 +512,11 @@ async def export_improvement_plan(
     import io
     import csv
     from fastapi.responses import StreamingResponse
-    from ml.prediction_model import ENEMPredictionModel
     from ml.recommendation_engine import RecommendationEngine
 
     try:
         # Get predictions
-        model = ENEMPredictionModel()
+        model = _get_prediction_model()
         predictions = model.predict_all_scores(codigo_inep)
 
         if 'error' in predictions:
