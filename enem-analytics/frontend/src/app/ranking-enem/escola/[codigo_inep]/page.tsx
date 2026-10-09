@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { ArrowRight, BarChart3, Database, MapPin, Trophy } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import EcosystemFooter from '@/components/ranking-seo/EcosystemFooter';
+import FaqSection from '@/components/ranking-seo/FaqSection';
+import { faqJsonLd, schoolAnswers, serializeJsonLd } from '@/lib/ranking-faq';
 import { UF_NAMES, municipioPath, ufPath } from '@/lib/ranking-geo';
 import { getPublicSchoolSeoSummary } from '@/lib/school-seo';
 
@@ -39,9 +41,8 @@ export async function generateMetadata({ params }: SchoolSeoPageProps): Promise<
   }
 
   const year = school.ultimo_ano || 'mais recente';
-  const location = schoolLocation(school.municipio, school.uf);
   const title = `${school.nome_escola} no ENEM ${year}: nota e ranking`;
-  const description = `${school.nome_escola}, ${location}: média ${formatScore(school.nota_media)} e posição ${school.ranking_brasil ? `nº ${school.ranking_brasil}` : 'no ranking'} do ENEM ${year}, com dados oficiais do INEP.`;
+  const description = `${schoolAnswers(school).lead} Dados oficiais do INEP.`;
   const canonical = `/ranking-enem/escola/${school.codigo_inep}`;
 
   return {
@@ -66,9 +67,11 @@ export default async function SchoolSeoPage({ params }: SchoolSeoPageProps) {
     ...(uf ? [{ name: UF_NAMES[uf], href: ufPath(uf) }] : []),
     ...(uf && school.municipio ? [{ name: school.municipio, href: municipioPath(uf, school.municipio) }] : []),
   ];
+  const answers = schoolAnswers(school);
   const structuredData = {
     '@context': 'https://schema.org',
     '@graph': [
+      ...(answers.faq.length > 0 ? [faqJsonLd(answers.faq)] : []),
       {
         '@type': 'WebPage',
         '@id': canonical,
@@ -97,7 +100,7 @@ export default async function SchoolSeoPage({ params }: SchoolSeoPageProps) {
 
   return (
     <div className="min-h-screen bg-[#f7fafc] text-slate-950">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }} />
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 sm:px-6">
           <Link href="/" className="flex items-center gap-3 font-black">
@@ -134,6 +137,7 @@ export default async function SchoolSeoPage({ params }: SchoolSeoPageProps) {
           <p className="mt-3 flex items-center gap-2 text-sm text-slate-300">
             <MapPin className="h-4 w-4" /> {location} · Código INEP {school.codigo_inep}
           </p>
+          <p className="mt-4 max-w-3xl text-base leading-7 text-slate-200">{answers.lead}</p>
 
           <div className="mt-8 grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl bg-white/10 p-5">
@@ -167,6 +171,8 @@ export default async function SchoolSeoPage({ params }: SchoolSeoPageProps) {
             ))}
           </div>
         </section>
+
+        <FaqSection items={answers.faq} />
 
         <section className="mt-6 grid gap-4 sm:grid-cols-2">
           <article className="rounded-3xl border border-slate-200 bg-white p-6">

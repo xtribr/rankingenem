@@ -2,11 +2,14 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import RankingSeoShell, { breadcrumbJsonLd, type Crumb } from '@/components/ranking-seo/RankingSeoShell';
+import FaqSection from '@/components/ranking-seo/FaqSection';
 import SchoolRankTable from '@/components/ranking-seo/SchoolRankTable';
+import { faqJsonLd, serializeJsonLd, ufAnswers } from '@/lib/ranking-faq';
 import {
   UF_NAMES,
   formatScore,
   getMunicipios,
+  getTopPublicSchoolByUf,
   getTopSchoolsByUf,
   getUfStats,
   municipioPath,
@@ -39,7 +42,7 @@ export async function generateMetadata({ params }: UfPageProps): Promise<Metadat
   const stats = (await getUfStats()).find((row) => row.uf === uf);
   const year = stats?.ano ?? 'mais recente';
   const title = `Ranking ENEM ${year} ${UF_NAMES[uf]} (${uf}): melhores escolas`;
-  const description = `Escolas ${ufDe(uf)} no ENEM ${year}: ${stats ? `média estadual ${formatScore(stats.media)}, ${formatCount(stats.escolas)} escolas ranqueadas` : 'ranking estadual'} e lista por município, com dados oficiais do INEP.`;
+  const description = `Escolas ${ufDe(uf)} no ENEM ${year}: ${stats ? `média das escolas ${formatScore(stats.media)}, ${formatCount(stats.escolas)} escolas ranqueadas` : 'ranking de escolas'} e lista por município, com dados oficiais do INEP.`;
   const canonical = ufPath(uf);
 
   return {
@@ -54,10 +57,11 @@ export default async function UfRankingPage({ params }: UfPageProps) {
   const uf = parseUfParam((await params).uf);
   if (!uf) notFound();
 
-  const [allStats, municipios, schools] = await Promise.all([
+  const [allStats, municipios, schools, bestPublic] = await Promise.all([
     getUfStats(),
     getMunicipios(uf),
     getTopSchoolsByUf(uf),
+    getTopPublicSchoolByUf(uf),
   ]);
   const stats = allStats.find((row) => row.uf === uf);
   if (!stats) notFound();
@@ -70,18 +74,23 @@ export default async function UfRankingPage({ params }: UfPageProps) {
     { name: 'Por estado', href: '/ranking-enem' },
     { name },
   ];
-  const structuredData = { '@context': 'https://schema.org', '@graph': [breadcrumbJsonLd(crumbs, path)] };
+  const answers = ufAnswers(stats, schools, bestPublic);
+  const structuredData = {
+    '@context': 'https://schema.org',
+    '@graph': [breadcrumbJsonLd(crumbs, path), ...(answers.faq.length > 0 ? [faqJsonLd(answers.faq)] : [])],
+  };
 
   return (
     <RankingSeoShell crumbs={crumbs}>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }} />
       <section className="mt-5 rounded-3xl bg-[#071a28] p-6 text-white shadow-lg sm:p-9">
         <h1 className="max-w-4xl text-3xl font-black tracking-tight sm:text-5xl">
           Ranking ENEM {year}: {name} ({uf})
         </h1>
+        <p className="mt-3 max-w-3xl text-base leading-7 text-slate-200">{answers.lead}</p>
         <div className="mt-8 grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl bg-white/10 p-5">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-300">Média estadual</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-300">Média das escolas</p>
             <p className="mt-1 text-3xl font-black">{formatScore(stats.media)}</p>
           </div>
           <div className="rounded-2xl bg-white/10 p-5">
@@ -117,6 +126,8 @@ export default async function UfRankingPage({ params }: UfPageProps) {
         </p>
         <SchoolRankTable schools={schools} showMunicipio />
       </section>
+
+      <FaqSection items={answers.faq} />
 
       <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
         <h2 className="text-2xl font-black">Ranking ENEM {year} por município {ufEm(uf)}</h2>

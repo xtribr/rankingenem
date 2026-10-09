@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import RankingSeoShell, { breadcrumbJsonLd, type Crumb } from '@/components/ranking-seo/RankingSeoShell';
+import { serializeJsonLd } from '@/lib/ranking-faq';
 import { UF_NAMES, formatScore, getUfStats, ufPath } from '@/lib/ranking-geo';
 
 // Renderiza sob demanda: o build não depende da API estar no ar.
@@ -30,7 +31,7 @@ export default async function RankingByUfPage() {
 
   return (
     <RankingSeoShell crumbs={CRUMBS}>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }} />
       <section className="mt-5 rounded-3xl bg-[#071a28] p-6 text-white shadow-lg sm:p-9">
         <h1 className="max-w-4xl text-3xl font-black tracking-tight sm:text-5xl">Ranking ENEM {year} por estado</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">

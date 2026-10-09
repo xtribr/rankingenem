@@ -51,6 +51,21 @@ export function ufEm(uf: string): string {
   return `${article ? `n${article}` : 'em'} ${UF_NAMES[uf]}`;
 }
 
+// Municípios que levam artigo ("no Rio de Janeiro"); os demais usam "de"/"em".
+const MUNICIPIO_ARTICLE: Record<string, 'o' | 'a'> = { 'Rio de Janeiro': 'o' };
+
+/** "do Rio de Janeiro", "de Natal". */
+export function municipioDe(municipio: string): string {
+  const article = MUNICIPIO_ARTICLE[municipio];
+  return `${article ? `d${article}` : 'de'} ${municipio}`;
+}
+
+/** "no Rio de Janeiro", "em Natal". */
+export function municipioEm(municipio: string): string {
+  const article = MUNICIPIO_ARTICLE[municipio];
+  return `${article ? `n${article}` : 'em'} ${municipio}`;
+}
+
 export interface UfStats {
   uf: string;
   media: number | null;
@@ -130,6 +145,14 @@ export async function getMunicipios(uf: string): Promise<string[]> {
 /** Primeiras escolas da UF, na ordem do ranking nacional do último ano. */
 export async function getTopSchoolsByUf(uf: string, limit = PAGE_SIZE): Promise<RankedSchool[]> {
   return getJson<RankedSchool[]>(`/api/schools/?uf=${encodeURIComponent(uf)}&limit=${limit}`);
+}
+
+/** Escola pública mais bem colocada da UF no último ano, se houver. */
+export async function getTopPublicSchoolByUf(uf: string): Promise<RankedSchool | null> {
+  const schools = await getJson<RankedSchool[]>(
+    `/api/schools/?uf=${encodeURIComponent(uf)}&tipo_escola=${encodeURIComponent('Pública')}&limit=1`,
+  );
+  return schools[0] ?? null;
 }
 
 /** Todas as escolas ranqueadas do município no último ano. */
