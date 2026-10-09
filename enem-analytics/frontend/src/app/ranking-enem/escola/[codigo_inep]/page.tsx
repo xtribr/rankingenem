@@ -3,6 +3,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowRight, BarChart3, Database, MapPin, Trophy } from 'lucide-react';
 import { notFound } from 'next/navigation';
+import { UF_NAMES, municipioPath, ufPath } from '@/lib/ranking-geo';
 import { getPublicSchoolSeoSummary } from '@/lib/school-seo';
 
 interface SchoolSeoPageProps {
@@ -59,6 +60,11 @@ export default async function SchoolSeoPage({ params }: SchoolSeoPageProps) {
   const year = school.ultimo_ano;
   const canonical = `${BASE_URL}/ranking-enem/escola/${school.codigo_inep}`;
   const location = schoolLocation(school.municipio, school.uf);
+  const uf = school.uf && school.uf in UF_NAMES ? school.uf : null;
+  const geoCrumbs = [
+    ...(uf ? [{ name: UF_NAMES[uf], href: ufPath(uf) }] : []),
+    ...(uf && school.municipio ? [{ name: school.municipio, href: municipioPath(uf, school.municipio) }] : []),
+  ];
   const structuredData = {
     '@context': 'https://schema.org',
     '@graph': [
@@ -76,7 +82,13 @@ export default async function SchoolSeoPage({ params }: SchoolSeoPageProps) {
         '@type': 'BreadcrumbList',
         itemListElement: [
           { '@type': 'ListItem', position: 1, name: 'Ranking ENEM', item: BASE_URL },
-          { '@type': 'ListItem', position: 2, name: school.nome_escola, item: canonical },
+          ...geoCrumbs.map((crumb, index) => ({
+            '@type': 'ListItem',
+            position: index + 2,
+            name: crumb.name,
+            item: `${BASE_URL}${crumb.href}`,
+          })),
+          { '@type': 'ListItem', position: geoCrumbs.length + 2, name: school.nome_escola, item: canonical },
         ],
       },
     ],
@@ -100,6 +112,12 @@ export default async function SchoolSeoPage({ params }: SchoolSeoPageProps) {
       <main className="mx-auto max-w-5xl px-4 py-7 sm:px-6 sm:py-10">
         <nav aria-label="Breadcrumb" className="text-sm text-slate-500">
           <Link href="/" className="font-semibold text-[#139ED3] hover:underline">Ranking ENEM</Link>
+          {geoCrumbs.map((crumb) => (
+            <span key={crumb.href}>
+              <span aria-hidden="true"> / </span>
+              <Link href={crumb.href} className="font-semibold text-[#139ED3] hover:underline">{crumb.name}</Link>
+            </span>
+          ))}
           <span aria-hidden="true"> / </span>
           <span>{school.nome_escola}</span>
         </nav>
