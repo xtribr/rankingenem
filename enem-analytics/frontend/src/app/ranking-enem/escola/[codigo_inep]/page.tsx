@@ -3,6 +3,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowRight, BarChart3, Database, MapPin, Trophy } from 'lucide-react';
 import { notFound } from 'next/navigation';
+import EcosystemFooter from '@/components/ranking-seo/EcosystemFooter';
 import { UF_NAMES, municipioPath, ufPath } from '@/lib/ranking-geo';
 import { getPublicSchoolSeoSummary } from '@/lib/school-seo';
 
@@ -183,6 +184,7 @@ export default async function SchoolSeoPage({ params }: SchoolSeoPageProps) {
           </article>
         </section>
       </main>
+      <EcosystemFooter />
     </div>
   );
 }

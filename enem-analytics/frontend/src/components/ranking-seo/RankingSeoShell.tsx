@@ -1,5 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
+import EcosystemFooter from './EcosystemFooter';
 
 export interface Crumb {
   name: string;
@@ -56,6 +57,7 @@ export default function RankingSeoShell({
         </nav>
         {children}
       </main>
+      <EcosystemFooter />
     </div>
   );
 }
